@@ -1,0 +1,11 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/CohenBerkeleyLab/BEHR-PSM-Gridding
+	branch = no-he5
+	commit = 5f78cd836677829968809f8310c1b0d181f59356
+	parent = d677b28e309a1e1153f8dc601343ecd769d7ad70
+	cmdver = 0.3.1
