@@ -1,0 +1,240 @@
+*
+************************************
+****   Berkeley High Resolution   ****
+**** (BEHR) NO2 Product Changelog ****
+**************************************
+
+Current maintainers: Josh Laughner (jlaughner@berkeley.edu)
+                     Qindan Zhu (qindan_zhu@berkeley.edu)
+
+==========
+1) Preface
+==========
+
+(I) Version numbering system
+
+The BEHR version numbering system combines the OMNO2 version number with an
+internal version letter. So, v2.1A represents the first BEHR product based on
+version 2.1 of the NASA OMNO2 product. A subsequent version of BEHR still based
+on version 2.1 of OMNO2 would be v2.1B. When OMNO2 updated to version 3, the BEHR 
+product based on that was named v3.0A.
+
+Should a minor change be made (e.g. one that adds information to the output but
+does not change the core algorithm), a revision number will be appended to the
+version number. For example, v2.1A and v2.1Arev0 will be the same, but v2.1Arev1
+would indicate this sort of minor change.
+
+The version number may also be formatted as, e.g. v2-1A. This is used as the version
+string in file names to prevent any issue with file systems unable to handle a . in
+a filename that is not separating the file extension. This form is completely
+equivalent to the one with the period and is used interchangeably.
+
+============
+2) Changelog
+============
+
+**** 3.0B ****
+-- Bug in the BEHRQualityFlags field fixed; previously the quality summary bit (least
+   significant bit) only flagged pixels with low quality albedo data and the error
+   summary bit (2nd least significant bit) only flagged pixels affected by the row
+   anomaly.
+-- Clear and cloudy scattering weights are now published separately; averaging kernels
+   are still the cloud radiance fraction-weighted sum of clear and cloudy sensitivities.
+-- The ocean reflectivity look up table was updated so that the reflectivity was calculated
+   at 460 nm instead of 430 nm. This is in the MODIS Band 3 window used for land surface
+   reflectivity.
+-- For the subproduct using daily NO2 profiles, the profile closest in time to the OMI overpass
+   is selected; previously the last profile before the OMI overpass was selected.
+-- The AMF calculation now uses a variable tropopause height derived from the WRF temperature
+   profiles instead of the previous fixed 200 hPa tropopause.
+-- If any of the NO2 profile, temperature profile, clear sky scattering weights, or cloudy
+   sky scattering weights are all undefined for a pixel, the AMF and NO2 VCD for that pixel
+   are set to fill values. Previously, there were rare cases where, e.g. the clear sky scattering
+   weights could be undefined but the cloudy sky scattering weights were not, and the AMF would
+   still be computed.
+-- Cloud pressure now clamped to <= surface pressure.
+-- The surface pressure is now calculated as suggested in Zhou et al. 2009 (doi:
+   10.5194/amt-2-401-2009), that is, the GLOBE elevation is used to adjust the WRF surface
+   pressure using the hypometric equation. Published variables have changed: GLOBETerpres
+   has been removed and replaced with GLOBETerrainHeight; new variables BEHRSurfacePressure
+   and WRFSurfacePressure added (WRFSurfacePressure is the unmodified surface pressure from
+   WRF, BEHRSurfacePressure is that used in the AMF calculation).
+
+**** 3.0A ****
+-- We will no longer produce the csv file version of BEHR due to the increasing number
+   of products that must be produced (monthly and daily profiles, additional regions).
+-- Base tropospheric SCDs updated to NASA OMI SP v3.0
+-- Pixel corners now derived from the OMPIXCOR product; the old "Loncorn" and "Latcorn"
+   fields have been removed. All non-OMI data products (MODIS, GLOBE, WRF-Chem) are 
+   averaged to OMI pixels using the FoV75Corner fields. Tiled fields are included as
+   well.
+-- MODISAlbedo is now derived from the MCD43D BRDF product rather than the MCD43C3 black
+   sky albedo product. Since v006 of MCD43D is available for each day, we use the MCD43D
+   file corresponding to each day retrieved, rather than the nearest of the 16-day averages.
+   The BRDF kernels are calculated according to the Eq. (38) and (39) of the MOD43 Theoretical
+   basis document (https://modis.gsfc.nasa.gov/data/atbd/atbd_mod09.pdf, accessed 18 Sept 2017).
+   Combined with the MCD43D coefficients, these provide the BRDF reflectivities within each
+   OMI pixel, which are then averaged to the OMI pixel. (Band 3 data from MCD43D07, MCD43D08, and
+   MCD43D09 used, with quality flag information from MCD43D31.)
+-- All non-fill MCD43D data is used to calculate the average BRDF coefficients for each pixel; 
+   however, if the average quality for the BRDF data is >= 2.5, the OMI pixel in question is flagged
+   as low quality. (MCD43D quality is denoted as 0-3, 0 is best quality, 3 is lowest.) Likewise,
+   if more than half of the MCD43D data in a pixel are fill values, the OMI pixel is also flagged
+   as low quality.
+-- OMI pixels are now classified as land or ocean based on the MODIS land-water map available
+   from ftp://rsftp.eeos.umb.edu/data02/Gapfilled/. If more than half of the OMI pixel is defined
+   as shallow ocean (class 0), moderate or continental ocean (class 6) or deep ocean (class 7) by
+   the land-water map, the pixel is classified as ocean and surface reflectance calculated based
+   on solar zenith angle and a parameterization derived from the Coupled Ocean-Atmosphere Radiative
+   Transfer (COART) model (https://cloudsgate2.larc.nasa.gov/jin/coart.html). This replaces the
+   previous SZA look up table.
+-- The formulation of the visible-only AMF has been changed: now the visible only AMF is
+   calculated as the ratio of the model slant column to the model visible VCD. Previously,
+   a cloudy visible-only AMF was calculated as the ratio of the model above-cloud slant 
+   column to the model above-cloud vertical column, which is combined with the clear sky
+   AMF (weighted by the cloud radiance fraction) to give the total AMF. This new method has
+   an easier physical interpretation and can be better reproduced using the published scattering
+   weights and NO2 profiles.
+-- New a priori profiles: the NO2 a priori profiles were generated with WRF-Chem at 12 km
+   resolution using 2012 emissions and the lightning configuration discussed in Laughner
+   and Cohen, AMTD, 2017, doi: 10.5194/amt-2017-263. The previous profiles did not include
+   lightning. 
+-- A product using daily NO2 profiles will be added as the simulation of those profiles is completed.
+   We expect to provide data using daily NO2 profiles for 2007-2009 and 2012-2014, possibly including
+   2005 and 2006 as well. NOTE: 2005 and 2006 profiles will be generated using boundary conditions 
+   from a different global CTM than 2007+, so caution is advised using 2005 and 2006 in studies of
+   NO2 trends.
+-- New temperature profiles: the temperature profiles are now taken from the same WRF-Chem simulations
+   as the NO2 profiles. This provides higher resolution and (IMPORTANT) fixes a bug in v2.1C in the
+   lookup of the NASA standard temperature profiles. That bug resulted in a ~5% bias in the v2.1C 
+   columns.
+-- New gridding method: BEHR fields are now gridded using the constant value method of the
+   omi python package (https://github.com/gkuhl/omi). This corrects an issue where some grid
+   cells would not be assigned a value using the previous gridding method.
+-- New BEHRQualityFlags field available that summarizes errors in the NASA and BEHR algorithms. Please
+   see the user guide for a full description.
+-- Additional swath-level attributes added that describe the input data files and the state of the code
+   at the time of production. See the user guide for more details.
+
+**** 2.1C ****
+-- Change to how ghost columns are handled
+-- IMPORTANT: the field BEHRColumnAmountNO2Trop in all prior versions is the total column,
+   including the below cloud component (the "ghost column")
+-- Previous versions of the user guide stated that multiplying the BEHR VCD by the ghost
+   fraction would return the total column; that was incorrect. The BEHR VCD was the total
+   column, dividing the VCD by the ghost fraction in previous versions will, in fact, return
+   the visible only column.
+-- The ghost fraction has been removed in this version, now visible-only fields
+   BEHRColumnAmountNO2TropVisOnly and BEHRAMFTropVisOnly give the VCD and AMF for the visible
+   only column; that is, the total (to ground) column over the clear part of the pixel plus
+   the above-cloud column over the cloudy part of the pixel.
+
+**** 2.1B ****
+-- Slight change to VCDs along coasts or over oceans
+-- Previous versions used a fill value of -500 m when calculating surface pressure over
+   oceans from GLOBE elevation data; hence ocean pixels had a GLOBETerpres value of 
+   ~1080 hPa. This has been corrected and ocean pixel will now correctly report a surface
+   pressure value of ~1013 hPa.
+-- Changes to VCDs in BEHRColumnAmountNO2Trop are generally < 1x10^15 molec. cm^-2, and
+   primarily limited to coastlines and regions outside the domain of 25-50 N, 125-65 W.
+   These changes occur for two reasons:
+    1) Coastline changes occur where the average pixel surface pressure derived from the
+       GLOBE elevation data was < 1013 hPa, but greater than it should have been as ocean
+       fill values mentioned above were averaged in.  Pure ocean pixels are unaffected 
+       because surface pressures are clamped to <= 1013 hPa before AMF computation.
+    2) Changes outside 25-50 N, 125-65 W occur where NO2 a priori profiles are available
+       but GLOBE data was not imported before. This version imports GLOBE data from 15-60 N
+       and 135-55 W, which should cover all pixels with NO2 a priori profiles available.
+       Previously, pixels outside the 25-50 N, 125-65 W domain assumed a surface pressure of
+       1013 hPa.
+-- Any pixels outside the new 15-50 N, 135-55 W GLOBE import region have their GLOBETerpres
+   field given a fill value, instead of the previous value of 1013.
+-- Pixels without valid MODISAlbedo data would previously have a value of 0 instead of the 
+   proper fill value. This has been corrected; it should only affect totally invalid pixels
+   (pixels with latitude/longitude unspecified or given as fill values).
+
+
+**** 2.1Arev1 ****
+-- Revision only: no substantial changes to the data product itself.
+-- File names will now contain the version number for easier tracability.
+-- Corrected issue where fill values for cloud fraction fields are divided by 1000. The
+   fields CloudFraction and CloudRadianceFraction will now have fill values of -32767
+   instead of -32.767.
+-- Terrain reflectivity has now been scaled to actually lie between 0 and 1. 
+-- All BEHR fields will now use a fill value of -3.402e38 (-realmax('single') in Matlab).
+-- Updated some metadata in the HDF files.
+-- The .txt files now replace NaNs with fill values for fields that have fill values defined.
+-- In the computation of the BEHR AMF, it has always been clamped to a minimum value of 1e-6.
+   This is still true; however, the way Matlab treats NaNs meant that a NaN AMF was changed to
+   1e-6, when really we would prefer that it remain a NaN as this usually indicates that either
+   the scattering weights or a priori profile were all NaNs as well, due to either the inputs
+   to the scattering weight lookup table being outside the ranges defined in that table or 
+   the a priori profile being undefined (usually because we are outside the BEHR-US domain).
+   Many cases where the AMF should have remained a NaN were returned to NaNs by a later check
+   in the code, however now pixels where the AMF is a NaN are never converted to 1e-6 in the 
+   first place. *Note: as long as you have been following the recommendation to remove all VCDs
+   >1e17 (as an extra guarentee against including row anomaly pixels), you will notice no change,
+   as AMFs of 1e-6 lead to VCDs of about 1e20 or greater. 
+-- Rarely, cloud pressure may be >1013 hPa. This causes the scattering weight lookup to fail, 
+   because the algorithm treats cloud pressure as surface pressure for the cloudy AMF, and the
+   lookup table is only defined for surface pressure <= 1013 hPa. Therefore, cloud pressures are
+   now clamped to <= 1013 hPa before input to the lookup table.
+-- Any pixel with a fill value for ColumnAmountNO2Trop (the standard product tropospheric column)
+   now explicitly has BEHRColumnAmountNO2Trop set to NaN in the algorithm (and so a fill value in
+   the data here). Because we only grid pixels with a non-NaN value for BEHRColumnAmountNO2Trop,
+   this means that the following days have been removed from the gridded product, as they had no
+   valid values for ColumnAmountNO2Trop:
+    > 2005-07-13
+    > 2005-11-02
+    > 2006-02-22
+    > 2006-07-10
+    > 2006-11-03
+    > 2007-03-01
+    > 2007-07-13
+    > 2007-11-06
+    > 2008-03-03
+    > 2010-01-29
+
+
+**** 2.1A ****
+
+-- First version produced by Josh Laughner
+-- Updated to OMNO2 version 2.1
+-- The field ColumnAmountNO2Initial is no longer available
+-- GLOBE terrain height now averaged directly to OMI pixels (no pre-averaging to
+~4 km resolution)
+-- 400 is no longer a fill value for the GLOBETerpres field. There should be no
+fill values in this field - grid points in the GLOBE database that do not have a
+value are over ocean, and so are assigned a pressure of 1013 hPa.
+-- Corrected bug in which the cloud fractions were scaled twice before
+inclusion in AMF calculation. (This had only a minor effect on NO2 columns.)
+-- Flag fields (vcdQualityFlags, XTrackQualityFlags) will now represent the most
+cautious flag in the gridded product (the flags from all pixels averaged
+together for a particular grid cell will be combined using a bitwise OR)
+-- Dataset numbers in the HDF may have changed due to the removal of
+ColumnAmountNO2Initial from OMNO2 (sorry!). Dataset names should be the same.
+-- Added scattering weights, averaging kernels, and the pressure levels for
+those quantities.  These are calculated as the average of the clear and cloudy
+scattering weights weighted by the radiance cloud fraction.  Both include the OMI
+temperature correction for the NO2 cross section.
+-- Added the a priori NO2 profiles used for each pixel.  This allows advanced users
+to compare the effect of a priori choice with a model of their own choosing.
+-- Attributes have been added to the HDF files' variables, including unit, 
+range, fill value, product (standard (SP) or BEHR), and a description. Each
+swath also has an attribute indicating if it is organized by native pixel or
+0.05 x 0.05 deg grid.
+-- The quantity represented by BEHRColumnAmountNO2Trop will represent only the
+visible NO2 column, and will not include any contribution from the ghost column.
+The field BEHRGhostFraction will provide a multiplicative factor to add back in
+the ghost column (based on WRF-Chem model runs) if desired.
+
+
+**** 2.0A ****
+
+-- Final version produced by Ashley Russell
+-- Albedo: MODIS MCD43C3 16-day average (every 8 days)
+-- Terrain pressure: Global Land One-kilometer Base Elevation (GLOBE) topography
+used to calculate surface pressure using scale height relationship. GLOBE data
+pre-averaged to 4-km.
+-- NO2 profiles calculated for continental US using WRF-Chem at 12 km resolution
+using NEI 2005 emissions.
