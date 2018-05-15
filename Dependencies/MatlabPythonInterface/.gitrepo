@@ -1,0 +1,11 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/CohenBerkeleyLab/MatlabPythonInterface.git
+	branch = master
+	commit = dcd79fcf188b392dec37586de54e8a837cd9a540
+	parent = 3ec004d7ca8a6e3190012e8d2024a5bcc7e30dd1
+	cmdver = 0.3.1
