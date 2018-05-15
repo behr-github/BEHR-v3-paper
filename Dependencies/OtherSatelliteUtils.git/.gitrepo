@@ -1,0 +1,11 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/CohenBerkeleyLab/OtherSatelliteUtils.git
+	branch = master
+	commit = 37b8862546032e9a253ad3d75639f89b5347b6a3
+	parent = b88e326d935a114d48174af3a25a5ee684d4f9a2
+	cmdver = 0.3.1
