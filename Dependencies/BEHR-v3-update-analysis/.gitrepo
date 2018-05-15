@@ -1,0 +1,11 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/behr-github/BEHR-v3-update-analysis.git
+	branch = master
+	commit = 76a185e8a09c4669a8428959ff434fc10d4a6052
+	parent = 8da1774b4f3fec105f7560b752881d5f596207ac
+	cmdver = 0.3.1
