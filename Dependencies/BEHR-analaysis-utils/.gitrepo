@@ -6,6 +6,7 @@
 [subrepo]
 	remote = https://github.com/CohenBerkeleyLab/BEHR-analysis-utils.git
 	branch = josh-dev
-	commit = d42e2cd9aedaa66f4c24acbf70f1414dbaeba6eb
-	parent = a76570de764d785e3f32267a4a71c4ca83ffc9f3
-	cmdver = 0.3.1
+	commit = 1ec6f7ca3bb4cabcb808d528f304ab812c64c9c2
+	parent = 4b2f41ff2f32e3c5d57e4213715a157990376d55
+	cmdver = 0.4.0
+	method = merge
