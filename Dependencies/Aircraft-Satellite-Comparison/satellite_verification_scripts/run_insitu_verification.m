@@ -107,7 +107,7 @@ catch err
     if strcmp(err.identifier, 'MATLAB:load:couldNotReadFile')
         prof_mode = regexp(behr_file, '(daily|monthly)', 'match', 'once');
         behr_date = datestr(datenum(regexp(behr_file, '\d\d\d\d\d\d\d\d', 'match', 'once'), 'yyyymmdd'));
-        E.filenotfound('No %s BEHR file available for %s', prof_mode, behr_date);
+        E.filenotfound('No %s BEHR file available for %s\n', prof_mode, behr_date);
     else
         rethrow(err)
     end

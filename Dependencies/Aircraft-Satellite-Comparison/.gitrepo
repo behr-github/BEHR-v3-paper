@@ -6,6 +6,7 @@
 [subrepo]
 	remote = https://github.com/behr-github/Aircraft-Satellite-Comparison.git
 	branch = master
-	commit = 07f8aa7119d8dda253b6ae3a6fbcbd04b64c65d2
-	parent = e4799a080549854dbb2d92f69704239836afd82b
-	cmdver = 0.3.1
+	commit = d1aaaf527ba4e8e2518ede25243dcfa1320559ed
+	parent = ec70f665febf31940222d83a2fb84d90325b095c
+	cmdver = 0.4.0
+	method = merge

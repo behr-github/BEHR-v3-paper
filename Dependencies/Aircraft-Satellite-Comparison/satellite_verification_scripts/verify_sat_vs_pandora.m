@@ -61,9 +61,9 @@ for i_orbit = 1:numel(Data)
     end
     
     if isempty(matches)
-        matches = get_valid_matched_data(Data(i_orbit), xx_good_pix & xx_pix);
+        matches = get_valid_matched_data(Data(i_orbit), xx_good_pix & xx_pix, pandora_lon, pandora_lat);
     else
-        matches = cat_fields(matches, get_valid_matched_data(Data(i_orbit), xx_good_pix & xx_pix));
+        matches = cat_fields(matches, get_valid_matched_data(Data(i_orbit), xx_good_pix & xx_pix, pandora_lon, pandora_lat));
     end
 end
 
@@ -93,6 +93,8 @@ matches.pandora_no2 = nan(size(matches.omi_time));
 for i_match = 1:numel(matches.omi_time)
     xx_time = abs(pandora_dnums - matches.omi_time(i_match)) < time_range;
     matches.pandora_no2(i_match) = nanmean(pandora_no2(xx_valid & xx_time));
+    matches.details(i_match).all_pandora_no2 = pandora_no2(xx_valid & xx_time);
+    matches.details(i_match).all_pandora_dnums = pandora_dnums(xx_valid & xx_time);
 end
 
 end
@@ -101,55 +103,29 @@ end
 % HELPER SUBFUNCTIONS %
 %%%%%%%%%%%%%%%%%%%%%%%
 
-function [lon, lat] = get_pandora_lat_lon(Merge)
-% The Pandora's latitude and longitude should be given in the
-% Merge.metadata LOCATION field. We'll allow any capitalization of LOCATION
-% and then search for Lat #, Long # in the string. 
-E = JLLErrors;
-
-fns = fieldnames(Merge.metadata);
-xx = strcmpi('location', fns);
-if sum(xx) ~= 1
-    E.callError('location_metadata', 'Could not identify the location metadata')
-end
-
-loc_string = Merge.metadata.(fns{xx});
-
-% An example location string from the Aldino site in Maryland:
-% ground- Aldino (Maryland), USA, Lat 39.563333°, Long -76.203889°, alt= 128m
-% So we want to search for the first occurence of numbers after Lat and
-% Long respectively. To be safe, I will search for Lat and Lon and allow
-% the to be any characters between them and the beginning of the number,
-% which the first character will either be a - or a digit.
-lat_string = regexpi(loc_string, '(?<=lat).+?\-?\d+\.?\d*', 'match', 'once');
-lon_string = regexpi(loc_string, '(?<=lon).+?\-?\d+\.?\d*', 'match', 'once');
-% This match will include the characters before the beginning of the number
-% after "lat" or "lon" because you cannot have a variable length
-% look-behind assertion
-lat = str2double(regexp(lat_string, '\-?\d.*', 'match', 'once'));
-lon = str2double(regexp(lon_string, '\-?\d.*', 'match', 'once'));
-
-end
-
 function xx_good = filter_bad_pixels(Data)
 Data = omi_pixel_reject(Data, 'detailed', struct('cloud_type', 'omi', 'cloud_frac', 0.2, 'row_anom_mode', 'XTrackFlags', 'check_behr_amf', true));
 xx_good = Data.Areaweight > 0;
 end
 
-function matches = get_valid_matched_data(Data, xx_match)
+function matches = get_valid_matched_data(Data, xx_match, pandora_lon, pandora_lat)
 
 matches.sp_no2 = nanmean(Data.ColumnAmountNO2Trop(xx_match) + Data.ColumnAmountNO2Strat(xx_match));
 matches.behr_no2 = nanmean(Data.BEHRColumnAmountNO2Trop(xx_match) + Data.ColumnAmountNO2Strat(xx_match));
 time_2d = repmat(Data.Time, 1, size(Data.Longitude,2));
 matches.omi_time = omi_time_conv(nanmean(time_2d(xx_match)));
 matches.details = subset_behr_data_struct(Data, xx_match);
+% Name these "profile_lon" and "profile_lat" to match the naming in the
+% aircraft structure.
+matches.profile_lon = repmat(pandora_lon, size(matches.sp_no2));
+matches.profile_lat = repmat(pandora_lat, size(matches.sp_no2));
 
 end
 
 function matches = format_output(matches)
 % Ensure that matches always has the same fields when output. This way if
 % we want to concatenate the match structures we can.
-req_fields = {'sp_no2', 'behr_no2', 'omi_time', 'details', 'pandora_no2'};
+req_fields = {'sp_no2', 'behr_no2', 'omi_time', 'details', 'pandora_no2', 'profile_lon', 'profile_lat'};
 if isempty(matches)
     matches = make_empty_struct_from_cell(req_fields);
 else

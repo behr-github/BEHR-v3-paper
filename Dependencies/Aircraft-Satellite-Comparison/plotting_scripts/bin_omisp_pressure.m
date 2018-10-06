@@ -31,11 +31,12 @@ binmode = pout.binmode;
 %%%%   Construct the bins   %%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% These are the pressure layers as defined in the OMNO2 readme (in units of
-% hPa)
-
-bin_midpoints = [1020, 1010, 1000, 990, 975, 960, 945, 925, 900, 875, 850, 825,...
-    800, 770, 740, 700, 660, 610, 560, 500, 450, 400, 350, 280, 200];
+% Before we used the pressure levels defined in the OMNO2 readme. When we
+% updated BEHR to use a variable tropopause, we needed to extend the levels
+% above our previous 200 hPa end point, so at that time, it made sense to
+% switch to using then same pressure levels as BEHR. The difference should
+% be minor, with most levels still present.
+bin_midpoints = behr_pres_levels();
 
 % Bucsela 2008 states that "bin widths [are] equal to the level spacing;"
 % so I will define bin edges as the center +/- 0.5*D, where D is the larger

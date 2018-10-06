@@ -75,6 +75,15 @@ function [profiles_final, profiles_struct] = verify_sat_vs_aircraft_vcds(Data, M
 %       a pixel to be included, it must pass BOTH this and the
 %       min_frac_in_pixel criteria.
 %
+%       'match_bl_only' - controls whether to only match pixels that the
+%       boundary layer part of the profile overlaps. This is by default 0,
+%       which turns this feature off. Values greater than 0 give the
+%       altitude below which points are counted as in the boundary layer.
+%       This altitude is compared to the radar altitude, so they must be in
+%       the same units. Example, assuming radar altitude is in kilometers,
+%       then if this is set to 3 only aircraft measurements below 3 km will
+%       be used in determining which pixels to compare against.
+%
 %   Integration parameters:
 %
 %       'prof_extension' - a char array, either 'extrap' (default), 'wrf',
@@ -322,15 +331,19 @@ profs(~xx_valid_profs) = [];
 
 end
 
+
 function profs = match_profiles_to_omi(profs, Data, varargin)
+E = JLLErrors;
 p = inputParser;
 p.addParameter('time_range',1.5);
+p.addParameter('match_bl_only', 0);
 p.addParameter('DEBUG_LEVEL', 2);
 p.KeepUnmatched = true;
 p.parse(varargin{:});
 pout = p.Results;
 
 time_range = pout.time_range / 24; % convert from hours to days for use with date numbers
+match_bl_only = pout.match_bl_only;
 DEBUG_LEVEL = pout.DEBUG_LEVEL;
 
 xx_matched = false(size(profs));
@@ -341,7 +354,10 @@ xx_matched = false(size(profs));
 profs(1).sp_no2 = [];
 profs(1).behr_no2 = [];
 profs(1).omi_area = []; % might use to weight the fit by which points use small pixels
+profs(1).nasa_terpres = [];
 profs(1).globe_terpres = []; % use to figure out how far we need to extrapolate the aircraft profile down to the surface.
+profs(1).nasa_tropopause = []; % need for the upper integration limit
+profs(1).wrf_tropopause = []; % need for the upper integration limit
 profs(1).matched_pixels = [];
 for i_orbit = 1:numel(Data)
     omi_loncorn = Data(i_orbit).FoV75CornerLongitude;
@@ -351,9 +367,22 @@ for i_orbit = 1:numel(Data)
     mean_orbit_time = nanmean(omi_time_conv(Data(i_orbit).Time(:)));
     
     for i_prof = 1:numel(profs)
+        % Are we only concerned with pixels that overlap the boundary layer
+        % part of the profile?
+        if match_bl_only > 0
+            xx_bl = profs(i_prof).radar_alt < match_bl_only;
+        else
+            xx_bl = true(size(profs(i_prof).utc));
+        end
+        
+        if sum(xx_bl(:)) == 0
+            if DEBUG_LEVEL > 1; fprintf('Profile id %s not matched with orbit %d on %s because it has no points in below the requested BL height (%.2f)\n', profs(i_prof).profile_id, i_orbit, profs(i_prof).date, match_bl_only); end
+            continue
+        end
+        
         % First check: is the profile within the requested time range of
         % this orbit? If not, we can skip it
-        prof_mean_utc = nanmean(profs(i_prof).utc);
+        prof_mean_utc = nanmean(profs(i_prof).utc(xx_bl));
         if prof_mean_utc < mean_orbit_time - time_range || prof_mean_utc > mean_orbit_time + time_range
             if DEBUG_LEVEL > 1; fprintf('Profile id %s not matched with orbit %d on %s because it is outside the time range of %f hr\n', profs(i_prof).profile_id, i_orbit, profs(i_prof).date, time_range*24); end
             continue
@@ -361,7 +390,7 @@ for i_orbit = 1:numel(Data)
         
         % Next, does this profile overlap at least one valid pixel in
         % space? 
-        xx_pix = pixels_overlap_profile(omi_loncorn, omi_latcorn, profs(i_prof).longitude, profs(i_prof).latitude, ~isnan(profs(i_prof).no2), varargin{:});
+        xx_pix = pixels_overlap_profile(omi_loncorn, omi_latcorn, profs(i_prof).longitude(xx_bl), profs(i_prof).latitude(xx_bl), ~isnan(profs(i_prof).no2(xx_bl)), varargin{:});
         if sum(~isnan(sp_no2(xx_pix))) == 0 && sum(~isnan(behr_no2(xx_pix))) == 0
             if DEBUG_LEVEL > 1; fprintf('Profile id %s not matched with orbit %d on %s because it does not overlap any valid pixels\n', profs(i_prof).profile_id, i_orbit, profs(i_prof).date); end
             continue
@@ -387,12 +416,29 @@ for i_orbit = 1:numel(Data)
         else
             this_omi_area = nan;
         end
-        this_globe_terpres = nanmean(Data(i_orbit).GLOBETerpres(xx_goodpix));
+        this_nasa_terpres = nanmean(Data(i_orbit).TerrainPressure(xx_goodpix));
+        if isfield(Data, 'BEHRSurfacePressure') % this was implemented for testing the hyposmetric surface pressure correction
+            this_globe_terpres = nanmean(Data(i_orbit).BEHRSurfacePressure(xx_goodpix));
+        else
+            this_globe_terpres = nanmean(Data(i_orbit).GLOBETerpres(xx_goodpix));
+        end
+        this_nasa_trop = nanmean(Data(i_orbit).TropopausePressure(xx_goodpix));
+        if isfield(Data, 'BEHRTropopausePressure')
+            this_wrf_trop = nanmean(Data(i_orbit).BEHRTropopausePressure(xx_goodpix));
+        else
+            % Assume that if there is no BEHR tropopause pressure specified
+            % then we must be using an old version that would always be
+            % integrated to 200 hPa.
+            this_wrf_trop = 200 * ones(size(this_globe_terpres));
+        end
         
         profs(i_prof).sp_no2 = veccat(profs(i_prof).sp_no2, this_sp_vcd);
         profs(i_prof).behr_no2 = veccat(profs(i_prof).behr_no2, this_behr_vcd);
         profs(i_prof).omi_area = veccat(profs(i_prof).omi_area, this_omi_area);
         profs(i_prof).globe_terpres = veccat(profs(i_prof).globe_terpres, this_globe_terpres);
+        profs(i_prof).nasa_terpres = veccat(profs(i_prof).nasa_terpres, this_nasa_terpres);
+        profs(i_prof).nasa_tropopause = veccat(profs(i_prof).nasa_tropopause, this_nasa_trop);
+        profs(i_prof).wrf_tropopause = veccat(profs(i_prof).wrf_tropopause, this_wrf_trop);
         profs(i_prof).matched_pixels = veccat(profs(i_prof).matched_pixels, matched_pixels);
     end
 end
@@ -417,12 +463,12 @@ prof_extension_mode = pout.prof_extension;
 DEBUG_LEVEL = pout.DEBUG_LEVEL;
 
 % Following Lamsal et al. 2014
-% (https://www.atmos-chem-phys.net/14/11587/2014/acp-14-11587-2014.pdf),
-% we will be using our WRF profiles both to insert at the top of the
-% aircraft profile and to describe the extrapolation to the terrain. Load
-% the WRF data now since it might take a while. The profile UTC should have
-% been converted to date numbers, that will tell us which WRF file is
-% closest in time to the aircraft profile.
+% (https://www.atmos-chem-phys.net/14/11587/2014/acp-14-11587-2014.pdf), we
+% will be using either our WRF or 2012 GEOS-Chem profiles both to insert at
+% the top of the aircraft profile and to describe the extrapolation to the
+% terrain. Load the WRF data now since it might take a while. The profile
+% UTC should have been converted to date numbers, that will tell us which
+% WRF file is closest in time to the aircraft profile.
 
 
 keep_profs = true(size(profs));
@@ -432,7 +478,7 @@ for i_prof = 1:numel(profs)
     
     % Next we need to bin the profiles to the OMI pressure levels. (This
     % may need updated once we push the tropopause update.)
-    [binned_prof, binned_pres] = bin_omisp_pressure(profs(i_prof).pressure, profs(i_prof).no2);
+    [binned_prof, binned_pres] = bin_omisp_pressure(profs(i_prof).pressure, profs(i_prof).no2, 'median');
     
     if any(strcmpi(prof_extension_mode, {'wrf','geos'}))
         [binned_prof, binned_pres, is_appended_or_interpolated, keep_profs(i_prof)] = append_model_to_profile(binned_prof, binned_pres, profs(i_prof), Data, prof_extension_mode, varargin{:});
@@ -463,7 +509,8 @@ for i_prof = 1:numel(profs)
     % the averaged matched pixels because each will have slightly
     % different surface and tropopause pressure.
     for i_match = 1:numel(profs(i_prof).globe_terpres)
-        profs(i_prof).air_no2(i_match) = integPr2(binned_prof, binned_pres, profs(i_prof).globe_terpres(i_match));
+        profs(i_prof).air_no2_nasa(i_match) = integPr2(binned_prof, binned_pres, profs(i_prof).nasa_terpres(i_match), profs(i_prof).nasa_tropopause(i_match), 'fatal_if_nans', true);
+        profs(i_prof).air_no2_behr(i_match) = integPr2(binned_prof, binned_pres, profs(i_prof).globe_terpres(i_match), profs(i_prof).wrf_tropopause(i_match), 'fatal_if_nans', true);
     end
     % Add the binned profiles so that we can see exactly what profile is
     % being integrated.
@@ -572,9 +619,8 @@ keep_this_prof = true;
 % concentration both roughly have exponential relationships to altitude
 
 % If any of wrf_avg_pres is a NaN, that means that we are outside the
-% WRF domain, and so in this mode, cannot integrate this profile. (If I
-% later implement extrapolation for comparison, then such profiles can
-% be included.)
+% model domain, and so in this mode, cannot integrate this profile. Such
+% profiles would have to be evaluated with extrapolation.
 if any(isnan(model_avg_pres))
     keep_this_prof = false;
     if DEBUG_LEVEL > 0
@@ -666,6 +712,8 @@ function gc_data = load_gc_profiles(aircraft_date, varargin)
 p = inputParser;
 p.addParameter('gc_data_dir','');
 p.addParameter('gc_data_year',[]);
+p.addParameter('gc_file_pattern','ts_12_14_satellite.%s.nc');
+p.addParameter('gc_file_date_fmt', 'yyyymmdd');
 p.KeepUnmatched = true;
 
 p.parse(varargin{:});
@@ -673,6 +721,8 @@ pout = p.Results;
 
 gc_data_dir = pout.gc_data_dir;
 gc_data_year = pout.gc_data_year;
+gc_file_pattern = pout.gc_file_pattern;
+gc_file_date_fmt = pout.gc_file_date_fmt;
 
 % If GEOS-chem year not given, assume that we have GEOS-Chem data for that
 % specific year. Otherwise, assume we only have the year give.
@@ -687,7 +737,7 @@ gc_date = datenum(gc_data_year, month(aircraft_date), day(aircraft_date));
 % GEOS-Chem run, these are for between 12 and 14 local standard time, and
 % are named ts_12_14_satellite.yyyymmdd.bpch, then translated to netCDF
 % files by gc_nd51_to_ncdf.py in the GEOS-Chem-Utils repo.
-gc_filename = fullfile(gc_data_dir, sprintf('ts_12_14_satellite.%s.nc', datestr(gc_date, 'yyyymmdd')));
+gc_filename = fullfile(gc_data_dir, sprintf(gc_file_pattern, datestr(gc_date, gc_file_date_fmt)));
 
 % We need the NO2 (converted to unscaled mixing ratio) along with lat/lon
 % and pressure for coordinates. We will mimic the structure that we get
@@ -725,9 +775,10 @@ function [profs_final, profs] = format_output(profs)
 % structure that matches the organization of what would be returned if
 % there was at least one profile.
 profs_req_fields = {'longitude', 'latitude', 'pressure', 'pressure_alt', 'radar_alt', 'no2', 'utc', 'profile_id', 'date', 'sp_no2', 'behr_no2', 'omi_area',...
-        'globe_terpres', 'matched_pixels', 'air_no2', 'binned_profile', 'binned_pressure', 'is_appended_or_interpolated'};
+        'nasa_terpres', 'globe_terpres', 'nasa_tropopause', 'wrf_tropopause', 'matched_pixels', 'air_no2_nasa', 'air_no2_behr', 'binned_profile', 'binned_pressure',...
+        'is_appended_or_interpolated'};
 if isempty(profs)
-    profs_final = struct('sp_no2', [], 'behr_no2', [], 'air_no2', [], 'omi_area', [], 'profile_ids', {{}}, 'profile_dates', {{}}, 'profile_lon', [], 'profile_lat', []);
+    profs_final = struct('sp_no2', [], 'behr_no2', [], 'air_no2_nasa', [], 'air_no2_behr', [], 'omi_area', [], 'profile_ids', {{}}, 'profile_dates', {{}}, 'profile_lon', [], 'profile_lat', []);
     % Make sure that profs always has the same fields no matter when the
     % function returns. Update this as necessary if adding more fields to
     % profs.
@@ -753,7 +804,8 @@ end
 
 profs_final.sp_no2 = veccat(profs.sp_no2, 'column');
 profs_final.behr_no2 = veccat(profs.behr_no2, 'column');
-profs_final.air_no2 = veccat(profs.air_no2, 'column');
+profs_final.air_no2_nasa = veccat(profs.air_no2_nasa, 'column');
+profs_final.air_no2_behr = veccat(profs.air_no2_behr, 'column');
 profs_final.omi_area = veccat(profs.omi_area, 'column');
 
 % Profile lon and lat are given at 1s resolution in the profiles, average
