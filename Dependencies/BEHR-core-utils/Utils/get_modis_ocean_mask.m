@@ -12,7 +12,8 @@ function [ is_ocean, lw_lon, lw_lat ] = get_modis_ocean_mask( lonlim, latlim )
 %   Land_Water_Mask_7Classes_UMD as of 21 Sept 2017.
 
 % The land mask seems to be given at 30 arc second resolution
-[lw_lon, lw_lat, lw_xx, lw_yy] = modis_cmg_latlon(1/120, lonlim, latlim, 'grid');
+[lw_lon, lw_lat, lw_xx, lw_yy] = modis_cmg_latlon(1/120, lonlim, latlim);
+lw_lat = lw_lat';
 
 hdfi = hdfinfo(behr_paths.modis_land_mask);
 lw_mask = hdfreadmodis(hdfi.Filename, hdfdsetname(hdfi, 1, 1, 'LW_MASK_UMD'), 'log_index', {lw_yy, lw_xx});

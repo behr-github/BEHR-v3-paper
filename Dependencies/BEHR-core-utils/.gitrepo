@@ -4,8 +4,9 @@
 ; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
 ;
 [subrepo]
-	remote = https://github.com/CohenBerkeleyLab/BEHR-core-utils.git
+	remote = git@github-at-berkeley:RCohenLab/BEHR-core-utils.git
 	branch = josh-dev
-	commit = 3f769161c3f3e06f3bdd260debee92440bbf2160
-	parent = 3f0fcb5c0a2b0dbd8e4ca99c2597c623e906ca99
-	cmdver = 0.3.1
+	commit = f2ab05695dbfb5f10a7eeaab2221157f8e0df9b5
+	parent = ea61f4c457d91cfa10caa6e2e2d4b7e246f5f97f
+	cmdver = 0.4.0
+	method = merge
