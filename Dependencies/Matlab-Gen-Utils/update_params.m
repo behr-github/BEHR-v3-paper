@@ -13,13 +13,22 @@ function parameters = update_params(parameters,varargin)
 %   PARAMETERS = UPDATE_PARAMS('remove', PARAMETERS, S) will take the field
 %   names of the structure S as the parameters to remove. This is useful if
 %   you have a structure returned by an input parser.
+%
+%   PARAMETERS = UPDATE_PARAMS('missing', PARAMETERS, NAME1, VALUE1, NAME2,
+%   VALUE2, ...) will add the parameters NAME1, NAME2, etc. if they are
+%   missing but will not replace them if they already exist.
 
 E = JLLErrors;
 
 add_parameters = true;
+only_add = false;
 if ischar(parameters)
     if strcmpi(parameters, 'remove')
         add_parameters = false;
+        parameters = varargin{1};
+        varargin = varargin(2:end);
+    elseif strcmpi(parameters, 'missing')
+        only_add = true;
         parameters = varargin{1};
         varargin = varargin(2:end);
     else
@@ -100,7 +109,10 @@ for i_param = 1:incr:numel(varargin)
     if add_parameters
         if parameter_missing
             parameters(end+1:end+2) = varargin(i_param:i_param+1);
-        else
+        elseif ~only_add
+            % If the "missing" flag was given, then we should only add the
+            % parameter if it is missing, not overwrite an existing
+            % parameter value.
             parameters{param_idx+1} = varargin{i_param+1};
         end
     else

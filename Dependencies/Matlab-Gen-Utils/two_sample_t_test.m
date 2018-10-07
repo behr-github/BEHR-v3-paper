@@ -1,13 +1,16 @@
-function [t_calc, t_table, is_different] = two_sample_t_test(val1, ssr1, n1, val2, ssr2, n2, n_dofs, varargin)
+function [t_calc, t_table, is_different] = two_sample_t_test(val1, s1, n1, val2, s2, n2, n_dofs, varargin)
 %TWO_SAMPLE_T_TEST Test whether two values are different based on the two value t-test.
-%   [ T_CALC, T_TABLE, IS_DIFFERENT ] = TWO_SAMPLE_T_TEST( VAL1, SSR1, N1, VAL2, SSR2, N2, N_DOFS )
-%   Does a two-sample t-test on two values (VAL1 and VAL2) for their given sum of squared residuals
-%   (SSR1 and SSR2) and the number of data points involved in each measurement (N1 and N2). N_DOFS
-%   is the number of degrees of freedom, which is usually N1 + N2 minus the number of parameters 
-%   fitted to the data. T_CALC is the T value calculated for the two sample populations, T_TABLE
-%   is the critical T value for, by default, a 95% confidence two-sided t-test. IS_DIFFERENT is
-%   a logical value, indicating whether the two samples are different at the 95% confidence level
-%   (i.e. t_calc > t_table).
+%   [ T_CALC, T_TABLE, IS_DIFFERENT ] = TWO_SAMPLE_T_TEST( VAL1, SSR1, N1,
+%   VAL2, SSR2, N2, N_DOFS ) Does a two-sample t-test on two values (VAL1
+%   and VAL2) for their squared standard deviations time their degrees of
+%   freedom (S1 and S2) and the number of data points involved in each
+%   measurement (N1 and N2). N_DOFS is the number of degrees of freedom,
+%   which is usually N1 + N2 minus the number of parameters fitted to the
+%   data. T_CALC is the T value calculated for the two sample populations,
+%   T_TABLE is the critical T value for, by default, a 95% confidence
+%   two-sided t-test. IS_DIFFERENT is a logical value, indicating whether
+%   the two samples are different at the 95% confidence level (i.e. t_calc
+%   > t_table).
 %
 %   Additional parameters:
 %       'confidence' - the confidence level, expressed as a decimal. 0.95 by default, i.e. 95%
@@ -35,29 +38,28 @@ t_sidedness = pout.sided;
 if ~isnumeric(val1) || ~isscalar(val1)
     E.badinput('VAL1 must be a numeric scalar')
 end
-if ~isnumeric(ssr1) || ~isscalar(ssr1)
+if ~isnumeric(s1) || ~isscalar(s1)
     E.badinput('SSR1 must be a numeric scalar')
 end
-% NaNs fail both the mod() test and the inequality test, but result in
-% t_calc == 0 and is_different = false, which is the desired behavior.
-if ~isnumeric(n1) || ~isscalar(n1) || (~isnan(n1) && (mod(n1,1) ~= 0 || n1 < 1))
-    E.badinput('N1 must be a positive, integer, numeric scalar')
+
+if ~isnumeric(n1) || ~isscalar(n1) || n1 < 1 || isnan(n1)
+    E.badinput('N1 must be a positive, numeric scalar')
 end
 
 
 if ~isnumeric(val2) || ~isscalar(val2)
     E.badinput('VAL2 must be a numeric scalar')
 end
-if ~isnumeric(ssr2) || ~isscalar(ssr2)
+if ~isnumeric(s2) || ~isscalar(s2)
     E.badinput('SSR2 must be a numeric scalar')
 end
-if ~isnumeric(n2) || ~isscalar(n2) || (~isnan(n2) && (mod(n2,1) ~= 0 || n2 < 1))
-    E.badinput('N2 must be a positive, integer, numeric scalar')
+if ~isnumeric(n2) || ~isscalar(n2) || n2 < 1 || isnan(n2)
+    E.badinput('N2 must be a positive, numeric scalar')
 end
 
 
-if ~isnumeric(n_dofs) || ~isscalar(n_dofs) || (~isnan(n_dofs) && (mod(n_dofs,1) ~= 0 || n_dofs < 1))
-   E.badinput('DOFS1 must be a positive, integer, numeric scalar')
+if ~isnumeric(n_dofs) || ~isscalar(n_dofs) || n_dofs < 0 || isnan(n_dofs)
+   E.badinput('N_DOFS must be a positive, numeric scalar')
 end
 
 
@@ -74,7 +76,7 @@ end
 % MAIN FUNCTION %
 %%%%%%%%%%%%%%%%%
 
-s_pooled = sqrt( (ssr1 + ssr2) ./ n_dofs );
+s_pooled = sqrt( (s1 + s2) ./ n_dofs );
 n_pooled = sqrt( n1 .* n2 / (n1 + n2) );
 t_calc = abs( val1 - val2 ) ./ s_pooled .* n_pooled;
 

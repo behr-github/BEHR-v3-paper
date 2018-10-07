@@ -101,6 +101,14 @@ function [ varargout ] = make_latex_table( T, varargin )
 %       the logical index is true. If given as a logical index, it is
 %       checked that it is the same length as the number of rows in the
 %       table. lines{2} is used for the horizontal line command.
+%
+%       'environment' - lets you change the float type. Default is 'table',
+%       you could change this to e.g. 'sidewaystable' to put the table
+%       sideways on the page (that particular example requires the
+%       "rotating" package is loaded in your .tex file).
+%
+%       'center' - boolean, adds the \centering command to the table
+%       environment to ensure the table is centered.
 
 E = JLLErrors;
 
@@ -118,6 +126,8 @@ p.addParameter('marker','');
 p.addParameter('overwrite',false);
 p.addParameter('extra_hlines',[]);
 p.addParameter('lines', {'\hline', '\hline', '\hline'});
+p.addParameter('environment', 'table');
+p.addParameter('center', false);
 
 p.parse(varargin{:});
 pout = p.Results;
@@ -135,6 +145,8 @@ insert_mark = pout.marker;
 overwrite = pout.overwrite;
 extra_hlines = pout.extra_hlines;
 hlines = pout.lines;
+environment = pout.environment;
+do_center = pout.center;
 
 if istable(T) && isempty(rownames)
     rownames = T.Properties.RowNames;
@@ -306,12 +318,18 @@ else
 end
 
 % Put it all together
-table_str = [' \begin{table}\n',...
+if do_center
+    center_line = ' \centering\n';
+else
+    center_line = ' ';
+end
+table_str = [' \begin{', environment,'}\n',...
+             center_line,...
              ' \begin{tabular}{%1$s}\n'...
              ' %2$s\n'...
              ' \end{tabular}\n'...
              ' %3$s%4$s'...
-             '\end{table}\n'];
+             '\end{', environment,'}\n'];
 table_str = tex_in_printf(table_str);
     
 if isempty(file_out)

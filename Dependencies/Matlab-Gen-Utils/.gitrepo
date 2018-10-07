@@ -4,8 +4,9 @@
 ; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
 ;
 [subrepo]
-	remote = https://github.com/CohenBerkeleyLab/Matlab-Gen-Utils.git
+	remote = git@github-at-berkeley:RCohenLab/Matlab-Gen-Utils.git
 	branch = josh-dev
-	commit = 0e7ba51f9e17fb5710f8b95c213f980ea988a0d5
-	parent = f69b297aaea3261bc3495442fb675dafbd1f436f
-	cmdver = 0.3.1
+	commit = b40d0c43270ff77907fec36eaa761bb1fc5f2ae8
+	parent = 8763b8787b2b5bf2a7180d3e3c0bb18d34bbc657
+	cmdver = 0.4.0
+	method = merge

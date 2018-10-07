@@ -44,11 +44,12 @@ end
 % 95% two-sided confidence interval, we need to compare against the
 % 97.5% t-value returned by tinv.
 confidence = 1 - ( (1 - confidence)/2 );
+n_vals = sum(~isnan(x) & ~isnan(y));
 
-sigma = sqrt(nansum2((y - P(1) .* x + P(2)).^2)./(numel(x) - 2));
+sigma = sqrt(nansum2((y - P(1) .* x + P(2)).^2)./(n_vals - 2));
 stderr_slope = sigma ./ sqrt(nansum2((x - nanmean(x)).^2));
 t_slope = (P(1) - test_slope) ./ stderr_slope;
-t_table = tinv(confidence, numel(x) - 2);
+t_table = tinv(confidence, n_vals - 2);
 
 is_sig = t_slope >= t_table;
 

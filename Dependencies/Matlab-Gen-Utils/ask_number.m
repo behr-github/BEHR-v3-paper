@@ -34,17 +34,6 @@ p.addParameter('testmsg','');
 p.parse(varargin{:});
 pout = p.Results;
 
-default = pout.default;
-if isempty(default)
-    use_default = false;
-else
-    use_default = true;
-    if ~isnumeric(default) || ~isscalar(default)
-        E.badinput('default must be a scalar number')
-    end
-end
-softquit = pout.softquit;
-
 testfxn = pout.testfxn;
 try
     testfxn(0);
@@ -59,9 +48,20 @@ if ~ischar(testmsg)
     E.badinput('testmsg must be a string')
 end
 
+default = pout.default;
+if isempty(default)
+    use_default = false;
+else
+    use_default = true;
+    if ~testfxn(default)
+        E.badinput('default fails the given test function (%s)', func2str(testfxn))
+    end
+end
+softquit = pout.softquit;
+
 
 if use_default
-    fprintf('%s (%g is default): ', prompt, default);
+    fprintf('%s (%s is default): ', prompt, sprintf_ranges(default, 'value_sep', ', '));
 else
     fprintf('%s: ', prompt);
 end

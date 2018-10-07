@@ -14,9 +14,9 @@ p = inputParser;
 p.addRequired('y',@isnumeric);
 p.addRequired('x_lower',@isnumeric);
 p.addRequired('x_upper',@isnumeric);
-p.addParamValue('colorspec',[0.8 0.8 0.8]);
-p.addParamValue('facealpha',1,@isscalar);
-p.addParamValue('fignum',-1);
+p.addParameter('colorspec',[0.8 0.8 0.8]);
+p.addParameter('facealpha',1,@isscalar);
+p.addParameter('ax',[]);
 
 p.parse(y_in, x_lower, x_upper, varargin{:});
 pout = p.Results;
@@ -26,22 +26,20 @@ xl = pout.x_lower;
 xu = pout.x_upper;
 
 colspec = pout.colorspec;
-nfig = pout.fignum;
+ax = pout.ax;
 facealpha = pout.facealpha;
 
 % If no figure handle is passed, create one. If one is, switch to that
 % figure and turn hold on so that we don't delete existing data.
-if nfig == -1
-    fighandle = figure();
-else
-    fighandle = figure(nfig);
-    hold on
+if isempty(ax)
+    ax = gca;
 end
+hold on
 
-X = [xl fliplr(xu)];
-Y = [y fliplr(y)];
+X = [xl(:); flipud(xu(:))];
+Y = [y(:); flipud(y(:))];
 
-fill(X,Y,colspec,'edgecolor','none','FaceAlpha',facealpha);
+fill(ax, X,Y,colspec,'edgecolor','none','FaceAlpha',facealpha);
 hold off
 
 end

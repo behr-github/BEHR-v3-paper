@@ -23,6 +23,10 @@ function [ LineData ] = plot_fit_line( x, varargin )
 %       y have the same units and scale, and if both x & y have
 %       non-negligible error.
 %
+%       'orth-origin' - minimized the mean square orthogonal difference
+%       between the points and the slope, forcing the slope through the
+%       origin.
+%
 %       'RMA' - takes a geometric mean of the y-on-x and x-on-y regression.
 %       Effectively minimizes the area of a triangle between each point and
 %       the fit line. Most computationally expensive, but good when x & y
@@ -54,7 +58,7 @@ p.addRequired('x');
 p.addOptional('y',[]);
 p.addParameter('one2one',true);
 p.addParameter('pvalue',false);
-p.addParameter('regression','y-resid',@(x) any(strcmpi(x,{'y-resid','x-resid','majoraxis','RMA'})));
+p.addParameter('regression','y-resid');
 p.addParameter('sigma_m',0,@isscalar);
 p.addParameter('sigma_b',0,@isscalar);
 

@@ -130,7 +130,7 @@ classdef advInputParser < handle
             
             err_struct = struct('message', formatted_msg,...
                 'identifier', 'MATLAB:InputParser:ArgumentFailedValidation',...
-                'stack', dbstack(2));
+                'stack', dbstack(3));
             % We omit the first levels in the stack because those will
             % point to the input parser, and we don't want that - we want
             % the calling function.
@@ -289,6 +289,13 @@ classdef advInputParser < handle
             else
                 msg = varargin{2};
             end
+
+            % Because of how struct() interprets cell arrays, any default values that are cell arrays
+            % must be wrapped in an outer cell array to prevent the structure from being non-scalar
+            if iscell(default)
+                default = {default};
+            end
+
             S = struct('name', name, 'default', default, 'validation_fxn', val_fxn, 'error_msg', msg);
         end
         

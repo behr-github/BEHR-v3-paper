@@ -71,12 +71,17 @@ elseif isstruct(dest)
     
     if ~missing_flag
         fields_to_copy = pout.fields_to_copy;
+        % If fields_to_copy isn't specified then we should copy all fields
+        % present in the destination structure
+        if isempty(fields_to_copy)
+            fields_to_copy = fieldnames(dest);
+        end
     else
         fields_to_copy = missing_fields(source, dest);
+        % If only copying missing fields, then if none are missing, there's
+        % nothing to copy.
     end
-    if isempty(fields_to_copy)
-        fields_to_copy = fieldnames(dest);
-    end
+    
 else
     E.badinput('DEST must be a string, cell array of strings, or structure');
 end

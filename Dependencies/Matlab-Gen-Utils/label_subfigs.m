@@ -5,13 +5,23 @@ function [  ] = label_subfigs( fig, varargin )
 %   vertically. Additional arguments accepted by label_axis_with_letter can
 %   be passed.
 
-xx = find(strcmpi(varargin, 'ax'));
-if ~isempty(xx)
-    varargin(xx:xx+1) = [];
-end
+p = advInputParser;
+p.addParameter('ax', []);
+p.KeepUnmatched = true;
+p.parse(varargin{:});
+pout = p.Results;
 
-xx = isgraphics(fig.Children, 'axes');
-figax = fig.Children(xx);
+ax = pout.ax;
+
+% Remove arguments for this function
+varargin = update_params('remove', varargin, pout);
+
+if isempty(ax)
+    xx = isgraphics(fig.Children, 'axes');
+    figax = fig.Children(xx);
+else
+    figax = ax;
+end
 pos = cat(1, figax.Position);
 [~,ord_ind] = sortrows(pos,[-2 1]); % sort by vertical position in reverse order, then by horizontal position in forward order
 

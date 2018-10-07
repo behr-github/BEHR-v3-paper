@@ -1,4 +1,4 @@
-function [ varargout ] = validate_date( date_in, varargin )
+function [ varargout ] = validate_date( date_in )
 %VALIDATE_DATE Check if a date can be understood
 %
 %   VALIDATE_DATE( DATE_IN ) Checks in DATE_IN can be understood by Matlab.

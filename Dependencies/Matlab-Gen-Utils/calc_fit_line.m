@@ -85,7 +85,7 @@ elseif ischar(xcoord) && ~any(strcmpi(xcoord, allowed_xcoords)) || ~ischar(xcoor
 end
 
 if any(isnan(x)) || any(isnan(y))
-    warning('NaNs detected, removing any points with a value of NaN for either coordinate');
+    warning('fitting:nans_removed','NaNs detected, removing any points with a value of NaN for either coordinate');
     nans = isnan(x) | isnan(y);
     x = x(~nans); y = y(~nans);
 end
@@ -112,7 +112,7 @@ switch regression
         
     case 'orth-origin'
         [P(1), sigma_m] = lsqfitnmorg(x,y);
-        P(2) = nan;
+        P(2) = 0;
         R = nan;
         sigma_b = nan;
 end

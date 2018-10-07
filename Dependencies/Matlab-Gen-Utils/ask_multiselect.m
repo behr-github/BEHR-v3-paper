@@ -28,13 +28,11 @@ end
 p = inputParser;
 p.addParameter('softquit',false,@(x) (islogical(x) && isscalar(x)));
 p.addParameter('returnindex',false)
-p.addParameter('rangeselect',false)
 p.parse(varargin{:});
 pout = p.Results;
 
 soft_quit = pout.softquit;
 return_ind = pout.returnindex;
-range_select = pout.rangeselect;
 
 if ~isscalar(soft_quit) || ~islogical(soft_quit)
     E.badinput('The parameter ''softquit'' must be a scalar logical value');
