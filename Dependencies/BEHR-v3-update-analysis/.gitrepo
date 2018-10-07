@@ -6,6 +6,7 @@
 [subrepo]
 	remote = https://github.com/behr-github/BEHR-v3-update-analysis.git
 	branch = master
-	commit = 76a185e8a09c4669a8428959ff434fc10d4a6052
-	parent = 8da1774b4f3fec105f7560b752881d5f596207ac
-	cmdver = 0.3.1
+	commit = 5409ac1f7e752a02dbc927439cfa2c5493e6f584
+	parent = 52f4a6e54f156baea52daf581e25ea883b50baad
+	cmdver = 0.4.0
+	method = merge

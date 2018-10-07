@@ -9,16 +9,23 @@ classdef misc_behr_v3_validation
         gcas_dir = '/Volumes/share2/USERS/LaughnerJ/CampaignRaw/DISCOVER-AQ_TX/B200/GCAS-SAO';
         
         plot_colors = struct('aircraft', struct('raw', [0.5 0.5 0.5], 'avg', 'k'),... % black and grey for the aircraft data
-                'v2', struct('raw', 'g', 'avg', [0 0.5 0]),... % greens for version 2
-                'monthly', struct('raw', [1 0.75 0], 'avg', 'r'),... % red and orange for the monthly profiles
-                'daily', struct('raw', 'c', 'avg', 'b')); % blue and cyan for the daily profiles
-            
+            'v2', struct('raw', 'g', 'avg', [0 0.5 0]),... % greens for version 2
+            'monthly', struct('raw', [1 0.75 0], 'avg', 'r'),... % red and orange for the monthly profiles
+            'daily', struct('raw', 'c', 'avg', 'b')); % blue and cyan for the daily profiles
+        
+        plot_markers = struct('aircraft', struct('raw', '.', 'avg', 'o', 'filled', false),...
+            'v2', struct('raw', '.', 'avg', '+', 'filled', false),...
+            'monthly', struct('raw', '.', 'avg', 's', 'filled', true),...
+            'daily', struct('raw', '.', 'avg', 'd', 'filled', false));
+        
+        plot_wrf_prof_legend_names = struct('aircraft', 'Aircraft', 'v2', 'V2', 'monthly', 'Monthly', 'daily', 'Daily');
+        
         profile_extend_methods = {'wrf','geos','extrap'};
         
-        
+        discover_campaigns = {'discover_md','discover_ca','discover_tx','discover_co'};
     end
     
-
+    
     
     methods(Static = true)
         %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -39,9 +46,7 @@ classdef misc_behr_v3_validation
         function value = profile_comp_file(extend_method)
             E = JLLErrors;
             narginchk(1,1);
-            if ~ismember(extend_method, misc_behr_v3_validation.profile_extend_methods)
-                E.badinput('EXTEND_METHOD must be one of: %s', strjoin(misc_behr_v3_validation.profile_extend_methods, ', '));
-            end
+            extend_method = opt_ask_multichoice('Which profile extension method to use?', misc_behr_v3_validation.profile_extend_methods, extend_method, 'extend_method', 'list', true);
             value = fullfile(misc_behr_v3_validation.validation_root_dir, 'VCD-Comparison', sprintf('profile-structs-%s.mat', extend_method));
         end
         
@@ -81,7 +86,7 @@ classdef misc_behr_v3_validation
             value = fullfile(misc_behr_v3_validation.validation_root_dir, 'Error-Analysis', 'pres-comp.mat');
         end
         
-        function acarreta_cldpres_error_raw_file()
+        function value = acarreta_cldpres_error_raw_file()
             value = fullfile(misc_behr_v3_validation.validation_root_dir, 'Error-Analysis', 'AcarrataCldPresUncert.txt');
         end
         
@@ -289,6 +294,7 @@ classdef misc_behr_v3_validation
                 'gc_file_date_fmt', 'yyyymm',...
                 'prof_extension', extension_mode,...
                 'match_bl_only', 3,...
+                'min_height', 1,... % added b/c some SEAC4RS profiles are very short, causing issues with the extrapolation
                 };
             try
                 [all_profs_final, all_profs_detail] = run_insitu_verification(campaign, prof_mode, comparison_params{:});
@@ -363,13 +369,13 @@ classdef misc_behr_v3_validation
                                 [~, time_fn] = misc_behr_v3_validation.format_profile_time_range(time_windows(b));
                                 % Construct the options list
                                 opts_list = {'campaign', all_campaigns{a},...
-                                             'behr_dir', behr_dir,...
-                                             'vectorize', false,...
-                                             'cloud_prod', 'omi',...
-                                             'cloud_frac_max', 0.2,...
-                                             'row_anomaly', 'XTrackFlags',...
-                                             'sat_fields', sat_fields,...
-                                             'time_window', time_windows(b)};
+                                    'behr_dir', behr_dir,...
+                                    'vectorize', false,...
+                                    'cloud_prod', 'omi',...
+                                    'cloud_frac_max', 0.2,...
+                                    'row_anomaly', 'XTrackFlags',...
+                                    'sat_fields', sat_fields,...
+                                    'time_window', time_windows(b)};
                                 try
                                     campaign.(time_fn) = run_gcas_verification(opts_list{:});
                                     campaign_vec.(time_fn) = vectorize_gcas_matches(campaign.(time_fn));
@@ -406,7 +412,7 @@ classdef misc_behr_v3_validation
             % This will generate a structure containing WRF data matched to
             % individual DISCOVER profiles, as well as information about
             % the OMI overpass time vs. the profile time
-            % 
+            %
             % The hierarchy of the structure will be:
             %   profile type (daily, monthly, or version 2)
             %       campaign
@@ -419,7 +425,7 @@ classdef misc_behr_v3_validation
             p.addParameter('do_save', nan);
             % By default, we want to restrict the campaign average profiles
             % to just the 1.5 hours before or after the standard OMI
-            % overpass of 1:30 pm. 
+            % overpass of 1:30 pm.
             p.addParameter('avg_prof_lst_range', [12, 15]);
             
             p.parse(varargin{:});
@@ -433,7 +439,7 @@ classdef misc_behr_v3_validation
             end
             
             profile_types = {'daily', 'monthly', 'v2'};
-            campaigns = {'soas', 'dc3', 'discover_md', 'discover_ca', 'discover_tx', 'discover_co'};
+            campaigns = {'seac4rs', 'soas', 'dc3', 'discover_md', 'discover_ca', 'discover_tx', 'discover_co'};
             %campaigns = {'discover_ca'};
             
             % Loop through each campaign, load each merge file, find each
@@ -700,28 +706,32 @@ classdef misc_behr_v3_validation
             % must be a scalar number of grid cells in each direction to
             % get. If omitted, defaults to 0.
             E = JLLErrors;
-    
+            
             if ~exist('radius', 'var')
                 radius = 0;
-            end 
-    
+            end
+            
             sz = size(lon);
             
             r = sqrt((lon - loc.Longitude).^2 + (lat - loc.Latitude).^2);
             [~, i_min] = min(r(:));
-            [xx, yy] = ind2sub(size(lon), i_min); 
-    
+            [xx, yy] = ind2sub(size(lon), i_min);
+            
             xx = (xx - radius):(xx + radius);
             xx = xx(xx > 0 & xx <= sz(1));
             yy = (yy - radius):(yy + radius);
             yy = yy(yy > 0 & yy <= sz(2));
-        end 
+        end
         
-        function [behr_daily, wrf_monthly, wrf_daily] = load_wrf_and_behr_data(plot_loc, date_in, load_gridded)
-            % Load the daily BEHR file, if it exists
-            if ~exist('load_gridded', 'var')
-                load_gridded = false;
-            end
+        function [behr_daily, wrf_monthly, wrf_daily] = load_wrf_and_behr_data(plot_loc, date_in, varargin)
+            p = inputParser;
+            p.addParameter('load_gridded', false);
+            p.addParameter('max_frac_nans', 1);
+            p.parse(varargin{:});
+            pout = p.Results;
+            
+            load_gridded = pout.load_gridded;
+            max_frac_nans = pout.max_frac_nans;
             
             if load_gridded
                 [Native, Data] = load_behr_file(date_in, 'daily', 'us');
@@ -733,33 +743,9 @@ classdef misc_behr_v3_validation
             wrf_int_mode = 'box';
             plot_radius = 10; %TODO: make this resolution agnostic. Will probably need to modify find_loc_indices
             
-            % Load a new monthly file, if needed
-            wrf_monthly_file = fullfile(find_wrf_path('us','monthly',date_in), sprintf('WRF_BEHR_monthly_%02d.nc', month(date_in)));
-            monthly_wrf_no2_vcds_tmp = compute_wrf_trop_columns(wrf_monthly_file, wrf_int_mode, 200);
-            monthly_wrf_lon_tmp = ncread(wrf_monthly_file, 'XLONG');
-            monthly_wrf_lat_tmp = ncread(wrf_monthly_file, 'XLAT');
-            
-            [xx_monthly, yy_monthly] = misc_behr_v3_validation.find_loc_indices(plot_loc, monthly_wrf_lon_tmp, monthly_wrf_lat_tmp, plot_radius);
-
-            wrf_monthly.lon = monthly_wrf_lon_tmp(xx_monthly, yy_monthly);
-            wrf_monthly.lat = monthly_wrf_lat_tmp(xx_monthly, yy_monthly);
-            wrf_monthly.no2_vcds = monthly_wrf_no2_vcds_tmp(xx_monthly, yy_monthly);
-            
-            % Get the WRF file name, but just retrieve the date b/c
-            % files produced on the cluster will have different paths
-            % and use the subset files, which aren't stored locally.
-            [~, daily_wrf_file_tmp] = fileparts(Data(1).BEHRWRFFile);
-            wrf_date = date_from_wrf_filenames(daily_wrf_file_tmp);
-            daily_file = fullfile(find_wrf_path('us','daily',wrf_date), sprintf('wrfout_d01_%s', datestr(wrf_date, 'yyyy-mm-dd_HH-MM-SS')));
-            daily_wrf_no2_vcds = compute_wrf_trop_columns(daily_file, wrf_int_mode, 200);
-            daily_wrf_lon = ncread(daily_file, 'XLONG');
-            daily_wrf_lat = ncread(daily_file, 'XLAT');
-            
-            [xx_daily, yy_daily] = misc_behr_v3_validation.find_loc_indices(plot_loc, daily_wrf_lon, daily_wrf_lat, plot_radius);
-            
-            wrf_daily.lon = daily_wrf_lon(xx_daily, yy_daily);
-            wrf_daily.lat = daily_wrf_lat(xx_daily, yy_daily);
-            wrf_daily.no2_vcds = daily_wrf_no2_vcds(xx_daily, yy_daily);
+            wrf_daily.lon = {};
+            wrf_daily.lat = {};
+            wrf_daily.no2_vcds = {};
             
             behr_daily.lon = {};
             behr_daily.lat = {};
@@ -782,41 +768,86 @@ classdef misc_behr_v3_validation
                 badpix = mod(Data(a).BEHRQualityFlags, 2) ~= 0;
                 Data(a).BEHRColumnAmountNO2Trop(badpix) = NaN;
                 [xx_sat, yy_sat] = misc_behr_v3_validation.find_loc_indices(plot_loc, Data(a).Longitude, Data(a).Latitude, plot_radius);
+                
+                these_scds = Data(a).BEHRColumnAmountNO2Trop(xx_sat,yy_sat) .* Data(a).BEHRAMFTrop(xx_sat, yy_sat);
+                if fracnan(these_scds) > max_frac_nans
+                    continue
+                end
+                
+                behr_daily.no2_vcds{end+1} = Data(a).BEHRColumnAmountNO2Trop(xx_sat,yy_sat);
+                behr_daily.no2_scds{end+1} = these_scds;
+                
                 if load_gridded
                     behr_daily.lon{end+1} = Data(a).Longitude(xx_sat,yy_sat);
                     behr_daily.lat{end+1} = Data(a).Latitude(xx_sat,yy_sat);
                 else
+                    % If not loaded gridded data, using the pixel corners
+                    % if usually better with pcolor() because of how it
+                    % matches colors and coordinates.
                     behr_daily.lon{end+1} = squeeze(Data(a).FoV75CornerLongitude(1,xx_sat,yy_sat));
                     behr_daily.lat{end+1} = squeeze(Data(a).FoV75CornerLatitude(1,xx_sat,yy_sat));
                 end
-                behr_daily.no2_vcds{end+1} = Data(a).BEHRColumnAmountNO2Trop(xx_sat,yy_sat);
-                behr_daily.no2_scds{end+1} = Data(a).BEHRColumnAmountNO2Trop(xx_sat,yy_sat) .* Data(a).BEHRAMFTrop(xx_sat, yy_sat);
+                
                 if load_gridded
                     behr_daily.areaweights{end+1} = Data(a).Areaweight;
                 end
+                
+                % Get the WRF file name, but just retrieve the date b/c
+                % files produced on the cluster will have different paths
+                % and use the subset files, which aren't stored locally.
+                [~, daily_wrf_file_tmp] = fileparts(Data(a).BEHRWRFFile);
+                wrf_date = date_from_wrf_filenames(daily_wrf_file_tmp);
+                daily_file = fullfile(find_wrf_path('us','daily',wrf_date), sprintf('wrfout_d01_%s', datestr(wrf_date, 'yyyy-mm-dd_HH-MM-SS')));
+                daily_wrf_no2_vcds = compute_wrf_trop_columns(daily_file, wrf_int_mode, 200);
+                daily_wrf_lon = ncread(daily_file, 'XLONG');
+                daily_wrf_lat = ncread(daily_file, 'XLAT');
+                
+                [xx_daily, yy_daily] = misc_behr_v3_validation.find_loc_indices(plot_loc, daily_wrf_lon, daily_wrf_lat, plot_radius);
+                
+                wrf_daily.lon{end+1} = daily_wrf_lon(xx_daily, yy_daily);
+                wrf_daily.lat{end+1} = daily_wrf_lat(xx_daily, yy_daily);
+                wrf_daily.no2_vcds{end+1} = daily_wrf_no2_vcds(xx_daily, yy_daily);
+            end
+            
+            % Load a new monthly file, if needed
+            if numel(behr_daily.lon) > 0
+                wrf_monthly_file = fullfile(find_wrf_path('us','monthly',date_in), sprintf('WRF_BEHR_monthly_%02d.nc', month(date_in)));
+                monthly_wrf_no2_vcds_tmp = compute_wrf_trop_columns(wrf_monthly_file, wrf_int_mode, 200);
+                monthly_wrf_lon_tmp = ncread(wrf_monthly_file, 'XLONG');
+                monthly_wrf_lat_tmp = ncread(wrf_monthly_file, 'XLAT');
+                
+                [xx_monthly, yy_monthly] = misc_behr_v3_validation.find_loc_indices(plot_loc, monthly_wrf_lon_tmp, monthly_wrf_lat_tmp, plot_radius);
+                
+                wrf_monthly.lon = monthly_wrf_lon_tmp(xx_monthly, yy_monthly);
+                wrf_monthly.lat = monthly_wrf_lat_tmp(xx_monthly, yy_monthly);
+                wrf_monthly.no2_vcds = monthly_wrf_no2_vcds_tmp(xx_monthly, yy_monthly);
+            else
+                wrf_monthly.lon = [];
+                wrf_monthly.lat = [];
+                wrf_monthly.no2_vcds = [];
             end
         end
-
+        
         function [box_vals, box_pres, box_quartiles] = make_boxplot_bins(pres, no2)
             [box_vals, box_pres, box_quartiles] = bin_omisp_pressure(pres, no2, 'median');
-            return 
+            return
             
-%             % old way, would need for true box plots
-%             [binned_no2, binned_pres] = bin_omisp_pressure(pres, no2, 'binonly');
-%             % Because BOXPLOT is pretty simpleminded, we need to make the
-%             % values and pressures vectors equal lengths
-%             box_vals = veccat(binned_no2{:});
-%             box_pres = nan(size(box_vals));
-%             i = 1;
-%             for a=1:numel(binned_no2)
-%                 j = i + numel(binned_no2{a}) - 1;
-%                 box_pres(i:j) = binned_pres(a);
-%                 i = j + 1;
-%             end
-%             
-%             box_nans = isnan(box_vals);
-%             box_vals(box_nans) = [];
-%             box_pres(box_nans) = [];
+            %             % old way, would need for true box plots
+            %             [binned_no2, binned_pres] = bin_omisp_pressure(pres, no2, 'binonly');
+            %             % Because BOXPLOT is pretty simpleminded, we need to make the
+            %             % values and pressures vectors equal lengths
+            %             box_vals = veccat(binned_no2{:});
+            %             box_pres = nan(size(box_vals));
+            %             i = 1;
+            %             for a=1:numel(binned_no2)
+            %                 j = i + numel(binned_no2{a}) - 1;
+            %                 box_pres(i:j) = binned_pres(a);
+            %                 i = j + 1;
+            %             end
+            %
+            %             box_nans = isnan(box_vals);
+            %             box_vals(box_nans) = [];
+            %             box_pres(box_nans) = [];
         end
         
         function [aircraft_comp, pandora_comp] = match_aircraft_and_pandora_sites(aircraft_comp, pandora_comp, varargin)
@@ -925,7 +956,8 @@ classdef misc_behr_v3_validation
                 if strcmpi(data_source, 'pandora')
                     comp_struct = load(misc_behr_v3_validation.pandora_comp_file);
                 else
-                    comp_struct = load(misc_behr_v3_validation.profile_comp_file(misc_behr_v3_validation.get_profile_extend_method(prof_extend_method)));
+                    opts.extend_method = misc_behr_v3_validation.get_profile_extend_method(prof_extend_method);
+                    comp_struct = load(misc_behr_v3_validation.profile_comp_file(opts.extend_method));
                 end
             end
             
@@ -937,7 +969,7 @@ classdef misc_behr_v3_validation
             opts.labels.x = opts.labels.(opts.x_var);
             opts.labels.y = opts.labels.(opts.y_var);
             
-            allowed_prof_modes = {'monthly', 'daily', 'both'};
+            allowed_prof_modes = {'monthly', 'daily', 'both', 'md-swap'};
             if regcmpi(opts.x_var, 'behr') || regcmpi(opts.y_var, 'behr')
                 opts.prof_mode = opt_ask_multichoice('Which profile mode to use for v3 data?', allowed_prof_modes, prof_mode, '"prof_mode"', 'list', true);
             else
@@ -980,7 +1012,7 @@ classdef misc_behr_v3_validation
             
             opts.version = opt_ask_multichoice('Which version of the product?', {'v2', 'v3', 'both'}, product_version, '"version"', 'list', true);
             
-            
+            swap_md_air = false;
             switch lower(opts.prof_mode)
                 case 'monthly'
                     tmp_data_structs = {comp_struct.v2.us_monthly, comp_struct.v3.us_monthly};
@@ -990,6 +1022,15 @@ classdef misc_behr_v3_validation
                     tmp_data_structs = {comp_struct.v2.us_monthly, comp_struct.v3.us_daily};
                     opts.legend_strings = {v2_string, v3D_string};
                     xx_v3 = [false, true];
+                case 'md-swap'
+                    tmp_data_structs = {comp_struct.v3.us_monthly, comp_struct.v3.us_daily};
+                    opts.legend_strings = {v3M_string, v3D_string};
+                    xx_v3 = [true, true];
+                    swap_md_air = true;
+                    if ~strcmpi(opts.version, 'v3')
+                        warning('For "md-swap" data source, version must be set to "v3", so setting version to "v3" now');
+                    end
+                    opts.version = 'v3';
                 case 'both'
                     tmp_data_structs = {comp_struct.v2.us_monthly, comp_struct.v3.us_monthly, comp_struct.v3.us_daily};
                     opts.legend_strings = {v2_string, v3M_string, v3D_string};
@@ -1017,12 +1058,76 @@ classdef misc_behr_v3_validation
                 for i_cam = 1:numel(opts.campaigns)
                     data_substruct = this_comp.(opts.campaigns{i_cam}).(opts.time_range);
                     if ~isempty(data_substruct)
-                        data_substruct.x = data_substruct(i_cam).(opts.x_var);
-                        data_substruct.y = data_substruct(i_cam).(opts.y_var);
+                        % Special case: if we're swapping out the monthly
+                        % and daily profiles' aircraft VCDs (since the
+                        % integration of those VCDs uses limits derived
+                        % from the profiles), then we need to override
+                        % where the x-variable comes from. We assume that
+                        % tmp_data_structs{1} is monthly and
+                        % tmp_data_structs{2} is daily profiles.
+                        if swap_md_air
+                            if i_dat == 1
+                                i_dat_swap = 2;
+                            elseif i_dat == 2
+                                i_dat_swap = 1;
+                            else
+                                E.notimplemented('Cannot swap monthly/daily aircraft VCDs if more than two data structs');
+                            end
+                            x_substruct = tmp_data_structs{i_dat_swap}.(opts.campaigns{i_cam}).(opts.time_range);
+                            if ~isempty(x_substruct)
+                                data_substruct.x = x_substruct.(opts.x_var);
+                            else
+                                warning('No daily prof data for %s, so not swapping x variable', opts.campaigns{i_cam});
+                                data_substruct.x = data_substruct.(opts.x_var);
+                            end
+                        else
+                            data_substruct.x = data_substruct.(opts.x_var);
+                        end
+                            
+                        data_substruct.y = data_substruct.(opts.y_var);
                     end
                     data_substruct.campaign = opts.campaigns{i_cam};
                     data_structs{i_dat}(i_cam) = data_substruct;
                 end
+            end
+            
+            dum=1;
+        end
+        
+        function [data_struct, air_opts, pan_opts] = load_combined_aircraft_pandora(varargin)
+            p = advInputParser;
+            p.addParameter('match', false);
+            p.KeepUnmatched = true;
+            p.parse(varargin{:});
+            pout = p.Results;
+            
+            match_aircraft_pandora = pout.match;
+            
+            [data_struct, air_opts] = misc_behr_v3_validation.load_comparison_data(varargin{:}, 'data_source', 'aircraft');
+            
+            x_var = air_opts.x_var;
+            if regcmp(x_var, '^air')
+                x_var = 'pandora_no2';
+            end
+            y_var = air_opts.y_var;
+            if regcmp(y_var, '^air')
+                y_var = 'pandora_no2';
+            end
+            
+            [pan_data, pan_opts] = misc_behr_v3_validation.load_comparison_data(air_opts, 'data_source', 'pandora', 'x_var', x_var, 'y_var', y_var, 'time_range', 't1230_1430');
+            
+            for i_dat = 1:numel(data_struct)
+                if ~isfield(data_struct{i_dat}, 'x')
+                    continue
+                end
+                
+                if match_aircraft_pandora
+                    [data_struct{i_dat}, pan_data{i_dat}] = misc_behr_v3_validation.match_aircraft_and_pandora_sites(data_struct{i_dat}, pan_data{i_dat}, 'match_time', true);
+                end
+                
+                
+                data_struct{i_dat}.x = veccat(data_struct{i_dat}.x, pan_data{i_dat}.x);
+                data_struct{i_dat}.y = veccat(data_struct{i_dat}.y, pan_data{i_dat}.y);
             end
         end
         
@@ -1050,7 +1155,7 @@ classdef misc_behr_v3_validation
             y = veccat(y, 33.5207);
             names = veccat(names, {'Birmingham'});
             
-            % Control which ones should be aligned right instead to avoid 
+            % Control which ones should be aligned right instead to avoid
             % overlapping names
             sites_align_right = {'Birmingham'};
             
@@ -1071,6 +1176,132 @@ classdef misc_behr_v3_validation
             line(x, y, 'marker', 'p', 'color', 'k', 'linestyle', 'none');
             text(x(~align_right)+0.25, y(~align_right), names(~align_right), 'BackgroundColor', 'w');
             text(x(align_right)-0.25, y(align_right), names(align_right),  'BackgroundColor', 'w', 'HorizontalAlignment', 'right');
+        end
+        
+        function slopes = gather_slopes(fit_info, campaigns_list)
+            % Gather the slopes into a structure for each campaign in
+            % discover_campaigns. Prefer ones with V > 0 only, if available.
+            discover_campaigns = misc_behr_v3_validation.discover_campaigns;
+            for i_cam = 1:numel(discover_campaigns)
+                this_campaign = upper(strrep(discover_campaigns{i_cam}, '_', '-'));
+                xx = strcmp(campaigns_list(:,1), sprintf('%s (V > 0)', this_campaign));
+                if sum(xx) == 0
+                    xx = strcmp(campaigns_list(:,1), this_campaign);
+                end
+                
+                slopes.(discover_campaigns{i_cam}).sp_no2 = fit_info.sp_no2{xx};
+                slopes.(discover_campaigns{i_cam}).behr_no2 = fit_info.behr_no2{xx};
+            end
+        end
+        
+        function [unwt_avg, unwt_std, wt_avg, wt_std, wt_eff_sample_size] = average_aircraft_pandora_slopes(air_data, pandora_data)
+            air = [air_data.P]';
+            % Concatenating P should alternate slope, intercept, slope,
+            % intercepts, etc. We just want the slopes.
+            air = air(1:2:end);
+            air_n= [air_data.num_pts]';
+            air_std = [air_data.StdDevM]';
+            pandora = [pandora_data.P]';
+            pandora = pandora(1:2:end);
+            pandora_n = [pandora_data.num_pts]';
+            pandora_std = [pandora_data.StdDevM]';
+            
+            unwt_avg = (air + pandora)/2;
+            unwt_std = sqrt( (0.5 .* air_std).^2 + (0.5 .* pandora_std).^2 );
+            
+            sum_n = air_n + pandora_n;
+            air_wt = air_n / sum_n;
+            pandora_wt = pandora_n / sum_n;
+            wt_avg = air .* air_wt + pandora .* pandora_wt;
+            wt_std = sqrt( ( air_wt .* air_std ).^2 + ( pandora_wt .* pandora_std ).^2 );
+            both_wts = [air_wt, pandora_wt];
+            
+            % I'm taking the definition of effective sample size from http://www.analyticalgroup.com/download/Alternative%20Approaches.pdf
+            wt_eff_sample_size = nansum(both_wts).^2/nansum(both_wts.^2);
+        end
+        
+        function xx_not_outlier = is_not_outlier(x,y)
+            xx_not_outlier = ~isoutlier(x) & ~isoutlier(y);
+        end
+        
+        function [fit_data, fit_line, varargout] = calculate_fit(x_no2, y_no2, varargin)
+            E = JLLErrors;
+            p = advInputParser;
+            p.addParameter('remove_outliers',nan);
+            p.addParameter('remove_neg_sat', nan);
+            p.addParameter('force_origin', nan);
+            
+            p.KeepUnmatched = true;
+            p.parse(varargin{:});
+            pout = p.Results;
+            
+            do_remove_outliers = pout.remove_outliers;
+            do_remove_neg_sat = pout.remove_neg_sat;
+            if pout.force_origin
+                regression_type = 'orth-origin';
+            else
+                regression_type = 'rma';
+            end
+            
+            % Make these parameters to be consistent with the other
+            % methods, so that parameters can just be all passed to this
+            % function.
+            if any(structfun(@isnan, pout))
+                E.badinput('All parameters (%s) must be given', strjoin(fieldnames(pout), ', '));
+            end
+            
+            if strcmpi(x_no2, 'load')
+                [data, opts] = misc_behr_v3_validation.load_comparison_data(y_no2{:});
+                varargout{1} = opts;
+            elseif strcmpi(x_no2, 'load-combined')
+                [data, air_opts, pan_opts] = misc_behr_v3_validation.load_combined_aircraft_pandora(y_no2{:});
+                varargout = {air_opts, pan_opts};
+            else
+                data{1}.x = x_no2;
+                data{1}.y = y_no2;
+            end
+            
+            for i_dat = 1:numel(data)
+                if ~isfield(data{i_dat}, 'x')
+                    continue
+                end
+                
+                x = data{i_dat}.x;
+                y = data{i_dat}.y;
+                
+                xx_keep = true(size(x));
+                
+                xx_keep = xx_keep & (~isnan(x) & ~isnan(y));
+                
+                % Temporary until I fix the imaginary column issue
+                not_imag = difftol(imag(x), zeros(size(x))) & difftol(imag(y), zeros(size(y)));
+                xx_keep = xx_keep & not_imag;
+                
+                if do_remove_neg_sat
+                    xx_keep = xx_keep & x >= 0 & y >= 0;
+                end
+                
+                
+                if do_remove_outliers
+                    % Must remove the points we're not considering for
+                    % other reasons before removing outliers. Trying to
+                    % keep xx_keep the length of the original data vectors
+                    % so that it can be returned to cut down other vectors
+                    % if necessary.
+                    xx_keep(xx_keep) = xx_keep(xx_keep) & misc_behr_v3_validation.is_not_outlier(x(xx_keep), y(xx_keep));
+                end
+                [fit_line(i_dat).x, fit_line(i_dat).y, fit_line(i_dat).legend, fit_data(i_dat)] = calc_fit_line(x(xx_keep), y(xx_keep), 'regression', regression_type, 'xcoord', [-1e17, 1e17], 'significance', true);
+                
+            end
+            
+            function [x, y] = check_data(data)
+                if isscalar(data)
+                    x = data.x;
+                    y = data.y;
+                else
+                    E.notimplemented('getting multiple data structures simultaneously');
+                end
+            end
         end
         
         %%%%%%%%%%%%%%%%%%%%%%
@@ -1115,6 +1346,11 @@ classdef misc_behr_v3_validation
             p.addParameter('campaigns',{});
             p.addParameter('remove_neg_vcd', []);
             p.addParameter('extend_method', '');
+            p.addParameter('force_origin', nan);
+            p.addParameter('swap_md', nan)
+            p.addParameter('return_as_table', nan);
+            p.addParameter('remove_outliers', nan);
+            p.addParameter('fit_quantities', '');
             
             p.parse(varargin{:});
             pout = p.Results;
@@ -1129,14 +1365,17 @@ classdef misc_behr_v3_validation
             
             
             campaigns = pout.campaigns;
-            extend_method = pout.extend_method;
+            extend_method = opt_ask_multichoice('Which profile extension method to use?', misc_behr_v3_validation.profile_extend_methods, pout.extend_method, 'extend_method', 'list', true);
+            do_remove_outliers = opt_ask_yn('Remove outliers?', pout.remove_outliers, '"remove_outliers"');
+            force_origin = opt_ask_yn('Force fits through origin?', pout.force_origin, '"force_origin"');
+            do_swap_monthly_daily = opt_ask_yn('Swap monthly/daily prof aircraft VCDs?', pout.swap_md, '"swap_md"');
+            return_as_table = opt_ask_yn('Return as table (not array)?', pout.return_as_table, '"return_as_table"');
+            fit_quantities = opt_ask_multichoice('Include slopes and std dev. or slope, int, R2?', {'std. dev.', 'int+R2'}, pout.fit_quantities, '"fit_quantities"', 'list', true);
+            do_intercept_r2 = strcmpi(fit_quantities, 'int+R2');
             
             remove_neg_vcd = opt_ask_yn('Remove negative VCDs?', pout.remove_neg_vcd, '"remove_neg_vcd"',...
-                'test_fxn', @(x) islogical(x) && (isscalar(x) || numel(x) == numel(campaigns)),...
+                'test_fxn', @(x) islogical(x) && (isscalar(x) || numel(x) == numel(campaigns)), 'ask_condition', @isempty,...
                 'test_msg', '%s must be a logical array, either scalar or the same size as "campaigns"');
-            if isscalar(remove_neg_vcd)
-                remove_neg_vcd = repmat(remove_neg_vcd, size(campaigns));
-            end
             
             switch lower(data_source)
                 case 'aircraft'
@@ -1161,8 +1400,20 @@ classdef misc_behr_v3_validation
                 campaigns = fieldnames(comp_struct.v2.us_monthly);
             end
             
-            common_opts = {'data_source', data_source, 'extend_method', extend_method, 'prof_mode', 'both', 'version', 'both', 'time_range', time_range, 'remove_outliers', true, 'plot_type', 'scatter',...
-                'color_by', 'none', 'match_pandora_aircraft', false};
+            if isscalar(remove_neg_vcd)
+                remove_neg_vcd = repmat(remove_neg_vcd, size(campaigns));
+            end
+            
+            if do_swap_monthly_daily
+                prof_mode = 'md-swap';
+                version = 'v3';
+            else
+                prof_mode = 'both';
+                version = 'both';
+            end
+            
+            common_opts = {'data_source', data_source, 'extend_method', extend_method, 'prof_mode', prof_mode, 'version', version, 'time_range', time_range, 'remove_outliers', do_remove_outliers, 'plot_type', 'scatter',...
+                'color_by', 'none', 'match_pandora_aircraft', false, 'force_origin', force_origin};
             
             for i_var = 1:2
                 x_var = allowed_vars{1, i_var};
@@ -1177,11 +1428,11 @@ classdef misc_behr_v3_validation
             % Ultimately want the table to look like
             %
             %                              | Slope | Intercept | R2 or p-value |
-            %            | SP   | v2       |       |           |               | 
-            %   campaign |      | v3       |       |           |               | 
-            %            | BEHR | v2       |       |           |               | 
-            %            |      | v3 (M)   |       |           |               | 
-            %            |      | v3 (D)   |       |           |               | 
+            %            | SP   | v2       |       |           |               |
+            %   campaign |      | v3       |       |           |               |
+            %            | BEHR | v2       |       |           |               |
+            %            |      | v3 (M)   |       |           |               |
+            %            |      | v3 (D)   |       |           |               |
             row_names = {};
             values = [];
             section_end_rows = [];
@@ -1189,15 +1440,20 @@ classdef misc_behr_v3_validation
             product_table_names = {'SP','BEHR'};
             for i_campaign = 1:numel(campaigns)
                 if remove_neg_vcd(i_campaign)
-                    vcd_str = ' (V > 0)';
+                    vcd_str = ' ($V > 0$)';
                 else
-                	vcd_str = '';
+                    vcd_str = '';
                 end
                 for i_prod = 1:numel(products)
                     substruct = fit_data.(products{i_prod}){i_campaign};
                     for i_sub = 1:numel(substruct)
                         this_row_names = {sprintf('%s%s', upper(strrep(campaigns{i_campaign},'_', '-')), vcd_str), sprintf('%s %s', product_table_names{i_prod}, substruct(i_sub).prof_type)};
-                        this_row_values = [substruct(i_sub).P(1), substruct(i_sub).P(2), substruct(i_sub).R2];
+                        if do_intercept_r2
+                            this_row_values = [substruct(i_sub).P(1), substruct(i_sub).P(2), substruct(i_sub).R2];
+                        else
+                            this_row_values = [substruct(i_sub).P(1), substruct(i_sub).StdDevM];
+                        end
+                        
                         row_names = cat(1, row_names, this_row_names);
                         values = cat(1, values, this_row_values);
                     end
@@ -1205,10 +1461,259 @@ classdef misc_behr_v3_validation
                 section_end_rows = veccat(section_end_rows, size(values,1));
             end
             
-            column_names = {'Campaign', 'Product', 'Slope','Intercept','$R^2$'};
+            if do_intercept_r2
+                column_names = {'Campaign', 'Product', 'Slope','Intercept','$R^2$'};
+            else
+                column_names = {'Campaign', 'Product', 'Slope'};
+            end
+            
+            if return_as_table
+                column_names{end} = 'R2';
+                table_row_names = cell(size(values,1),1);
+                for i_row = 1:numel(table_row_names)
+                    table_row_names{i_row} = strjoin(row_names(i_row, :), ': ');
+                end
+                values = array2table(values, 'RowNames', table_row_names, 'VariableNames', column_names(3:end));
+            end
         end
         
+        function [values, colnames, rownames, samples, extra_hlines] = make_aircraft_pandora_combo(varargin)
+            % This one regresses aircraft and pandora together, rather than
+            % averaging their slopes after the fact.
+            p = advInputParser;
+            p.addParameter('return_as_table', true);
+            p.addParameter('products', {});
+            p.addParameter('fit_quantities', '');
+            p.KeepUnmatched = true;
+            p.parse(varargin{:});
+            pout = p.Results;
+            
+            % These have an obvious default if running interactively
+            do_return_as_table = pout.return_as_table;
+            products_to_keep = pout.products;
+            
+            % These do not, so ask
+            fit_quantities = opt_ask_multichoice('Include slopes and std dev. or slope, int, R2?', {'std. dev.', 'int+R2'}, pout.fit_quantities, '"fit_quantities"', 'list', true);
+            do_intercept_r2 = strcmpi(fit_quantities, 'int+R2');
+            
+            campaigns = misc_behr_v3_validation.discover_campaigns;
+            variables = {'air_no2_nasa', 'sp_no2';...
+                'air_no2_behr', 'behr_no2'};
+            values = [];
+            rownames = {};
+            samples = [];
+            extra_hlines = logical([]);
+            for i_cam = 1:numel(campaigns)
+                this_campaign = campaigns{i_cam};
+                for i_var = 1:size(variables)
+                    air_var = variables{i_var, 1};
+                    sat_var = variables{i_var, 2};
+                    data_opts = {'data_source','aircraft','extend_method','geos','x_var',air_var,'y_var',sat_var,...
+                        'prof_mode','both','campaigns',{this_campaign},'time_range','t1200_1500','version','both'};
+                    [fit_data_match, ~, air_opts] = misc_behr_v3_validation.calculate_fit('load-combined', [data_opts, 'match', true], 'remove_outliers', true, 'remove_neg_sat', true, 'force_origin', false);
+                    fit_data_all = misc_behr_v3_validation.calculate_fit('load-combined', [data_opts, 'match', false], 'remove_outliers', true, 'remove_neg_sat', true, 'force_origin', false);
+                    
+                    if numel(fit_data_match) ~= numel(fit_data_all)
+                        E.notimplemented('The matched and all fits returned different numbers of structures');
+                    end
+                    
+                    for i_fit = 1:numel(fit_data_match)
+                        this_rowname = {upper(strrep(this_campaign, '_', '-')), sprintf('%s %s', air_opts.title_product_str, air_opts.legend_strings{i_fit})};
+                        % Easier way to homogenize this with the average table
+                        this_rowname = strrep(this_rowname, 'NASA', 'SP');
+                        if ~isempty(products_to_keep) && ~ismember(this_rowname{2}, products_to_keep)
+                            continue
+                        end
+                        if do_intercept_r2
+                            these_vals = [fit_data_match(i_fit).P(1), fit_data_match(i_fit).P(2), fit_data_match(i_fit).R2, fit_data_all(i_fit).P(1), fit_data_all(i_fit).P(2), fit_data_all(i_fit).R2];
+                        else
+                            these_vals = [fit_data_match(i_fit).P(1), fit_data_match(i_fit).StdDevM, fit_data_all(i_fit).P(1), fit_data_all(i_fit).StdDevM];
+                        end
+                        values = cat(1, values, these_vals);
+                        samples = cat(1, samples, [fit_data_match(i_fit).num_pts, fit_data_all(i_fit).num_pts]);
+                        rownames = cat(1, rownames, this_rowname);
+                        extra_hlines = cat(1, extra_hlines, false);
+                    end
+                end
+                % Mark the last line of each campaign to have a horizontal
+                % line after it.
+                extra_hlines(end) = true;
+            end
+            
+            
+            
+            if do_return_as_table
+                if do_intercept_r2
+                    colnames = {'MatchedData','MatchedDataSigma','AllData','AllDataSigma'};
+                else
+                    colnames = {'MatchedSlope', 'MatchedInt', 'MatchedR2', 'AllSlope', 'AllInt', 'AllR2'};
+                end
+                
+                for i_row = 1:size(rownames,1)
+                    table_rownames{i_row} = strjoin(rownames(i_row, :), ': ');
+                end
+                values = array2table(values, 'RowNames', table_rownames, 'VariableNames', colnames);
+            else
+                if do_intercept_r2
+                    colnames = {'', '', 'Matched Data', 'Matched Data', 'Matched Data', 'All Data', 'All Data', 'All Data';...
+                        'Campaign', 'Product', 'Slope', 'Intercept', 'R2', 'Slope', 'Intercept', 'R2'};
+                else
+                    colnames = {'Campaign', 'Product', 'Slope (Matched)', 'Slope (All)'};
+                end
+                
+            end
+        end
         
+        function varargout = make_aircraft_pandora_avg(varargin)
+            E = JLLErrors;
+            p = inputParser;
+            p.addParameter('extend_method', '');
+            p.addParameter('plot_or_table', '');
+            p.addParameter('products', {});
+            p.addParameter('remove_outliers', nan);
+            p.addParameter('force_origin', nan);
+            p.addParameter('swap_md', nan)
+            p.addParameter('return_as_table', nan);
+            p.parse(varargin{:});
+            pout = p.Results;
+            
+            requested_products = pout.products;
+            
+            product_helper = struct('name', {'SP v2.1', 'SP v3.0', 'BEHR v2.1', 'BEHR v3.0 (M)', 'BEHR v3.0 (D)'},...
+                'get_fxn', {@(S, campaign) S.(campaign).sp_no2(1),...
+                @(S, campaign) S.(campaign).sp_no2(2),...
+                @(S, campaign) S.(campaign).behr_no2(1),...
+                @(S, campaign) S.(campaign).behr_no2(2),...
+                @(S, campaign) S.(campaign).behr_no2(3)});
+            product_formats = struct('marker', {'o','*','d','v','^'}, 'color', {'r',[1 0.5 0],'b',[0.5 0 0.5],[0 0.5 0]},...
+                'markersize',11,'linewidth',2);
+            products = {product_helper.name};
+            
+            extend_method = opt_ask_multichoice('Which profile extend method to use for the aircraft data', misc_behr_v3_validation.profile_extend_methods, pout.extend_method, '"extend_method"', 'list', true);
+            plot_or_table = opt_ask_multichoice('Make a plot of slopes or return information for a table?', {'plot', 'table'}, pout.plot_or_table, '"plot_or_table"', 'list', true);
+            is_plot = strcmpi(plot_or_table, 'plot');
+            is_table = strcmpi(plot_or_table, 'table');
+            
+            if isempty(requested_products)
+                product_inds = ask_multiselect('Which products to include?', products, 'returnindex', true);
+            else
+                if any(~ismember(requested_products, products))
+                    E.badinput('One of the products given is not valid. Allowed values are: %s', strjoin(products, ', '));
+                end
+                product_inds = find(ismember(products, requested_products));
+            end
+            
+            do_remove_outliers = opt_ask_yn('Remove outliers?', pout.remove_outliers, '"remove_outliers"');
+            force_origin = opt_ask_yn('Force fits through origin?', pout.force_origin, '"force_origin"');
+            do_swap_monthly_daily = opt_ask_yn('Swap monthly/daily prof aircraft VCDs?', pout.swap_md, '"swap_md"');
+            
+            product_helper = product_helper(product_inds);
+            product_formats = product_formats(product_inds);
+            
+            
+            
+            if is_table
+                return_as_table = opt_ask_yn('Return as table (not array)?', pout.return_as_table, '"return_as_table"');
+            end
+            
+            discover_campaigns = misc_behr_v3_validation.discover_campaigns;
+            
+            common_opts = {'campaigns', discover_campaigns, 'remove_neg_vcd', [false, false, false, true], 'extend_method', extend_method, 'force_origin', force_origin,...
+                'swap_md', do_swap_monthly_daily, 'return_as_table', false, 'remove_outliers', do_remove_outliers};
+            [~, ~, rownames_aircraft, ~, fit_data_aircraft] = misc_behr_v3_validation.tabulate_insitu_comparisons(common_opts{:}, 'data_source', 'aircraft');
+            [~, ~, rownames_pandora, ~, fit_data_pandora] = misc_behr_v3_validation.tabulate_insitu_comparisons(common_opts{:}, 'data_source', 'pandora');
+            
+            air_slopes = misc_behr_v3_validation.gather_slopes(fit_data_aircraft, unique(rownames_aircraft(:, 1), 'stable'));
+            pandora_slopes = misc_behr_v3_validation.gather_slopes(fit_data_pandora, unique(rownames_pandora(:, 1), 'stable'));
+            
+            
+            
+            if is_table
+                table_values = [];
+                sample_sizes = [];
+                rownames = {};
+            elseif is_plot
+                plot_empty_array = nan(numel(discover_campaigns), numel(product_helper));
+                plot_unwt_values = plot_empty_array;
+                plot_unwt_err = plot_empty_array;
+                plot_wt_values = plot_empty_array;
+                plot_wt_err = plot_empty_array;
+            else
+                E.notimplemented('initialization for neither plot nor table')
+            end
+            
+            for i_cam = 1:numel(discover_campaigns)
+                for i_prod = 1:numel(product_helper)
+                    try
+                        air_behr = product_helper(i_prod).get_fxn(air_slopes, discover_campaigns{i_cam});
+                        pandora_behr = product_helper(i_prod).get_fxn(pandora_slopes, discover_campaigns{i_cam});
+                    catch err
+                        if strcmpi(err.identifier, 'MATLAB:badsubscript')
+                            % This happens if we try to get a BEHR daily
+                            % result for a campaign that doesn't have one,
+                            % so just move on to the next campaign.
+                            continue
+                        else
+                            rethrow(err)
+                        end
+                    end
+                    
+                    [unwt_avg, unwt_std, wt_avg, wt_std, wt_eff_sample_size] = misc_behr_v3_validation.average_aircraft_pandora_slopes(air_behr, pandora_behr);
+                    
+                    
+                    if is_table
+                        campaign_name = strrep(upper(discover_campaigns{i_cam}), '_', '-');
+                        these_rownames = {campaign_name, product_helper(i_prod).name};
+                        rownames = cat(1, rownames, these_rownames);
+                        
+                        table_values = cat(1, table_values, [unwt_avg, unwt_std, wt_avg, wt_std]);
+                        sample_sizes = cat(1, sample_sizes, [2, wt_eff_sample_size]);
+                    elseif is_plot
+                        plot_unwt_values(i_cam, i_prod) = unwt_avg;
+                        plot_unwt_err(i_cam, i_prod) = unwt_std;
+                        plot_wt_values(i_cam, i_prod) = wt_avg;
+                        plot_wt_err(i_cam, i_prod) = wt_std;
+                    else
+                        E.notimplemented('data concatenation for neither plot nor table')
+                    end
+                end
+            end
+            
+            if strcmpi(plot_or_table, 'table')
+                if return_as_table
+                    colnames = {'AvgSlope', 'AvgSlopeSigma', 'WtAvgSlope', 'WtAvgSlopeSigma'};
+                    t_rownames = cell(size(rownames,1),1);
+                    for i_row = 1:size(rownames,1)
+                        t_rownames{i_row} = strjoin(rownames(i_row,:), ': ');
+                    end
+                    varargout{1} = array2table(table_values, 'VariableNames', colnames, 'RowNames', t_rownames);
+                    varargout{2} = sample_sizes;
+                else
+                    colnames = {'Campaign','Product','Avg. slope','Weighted avg. slope'};
+                    varargout = {table_values, colnames, rownames, sample_sizes};
+                end
+                
+            elseif strcmpi(plot_or_table, 'plot')
+                xtick_labels = cellfun(@(x) strrep(upper(x), '_', '-'), discover_campaigns, 'uniformoutput', false);
+                varargout{1} = figure;
+                l = scatter_grouped(plot_unwt_values, plot_unwt_err, 'group_fmt', product_formats, 'error_bar_fmt', rmfield(product_formats, {'marker','markersize'}));
+                
+                line([0, 5], [1 1], 'color', 'k', 'linestyle', '--', 'linewidth', 2);
+                legend(l, {product_helper.name});
+                set(gca, 'xticklabel', xtick_labels,'xticklabelrotation', 30, 'fontsize', 16);
+                title('Unweighted average');
+                
+                varargout{2} = figure;
+                l2 = scatter_grouped(plot_wt_values, plot_wt_err, 'group_fmt', product_formats, 'error_bar_fmt', rmfield(product_formats, {'marker','markersize'}));
+                line([0, 5], [1 1], 'color', 'k', 'linestyle', '--', 'linewidth', 2);
+                legend(l2, {product_helper.name});
+                set(gca, 'xticklabel', xtick_labels,'xticklabelrotation', 30, 'fontsize', 16);
+                title('Weighted average');
+            else
+                E.notimplemented('No action defined for plot_or_table == "%s"', plot_or_table);
+            end
+            
+        end
         
         function varargout = plot_one_vcd_comparison(varargin)
             % This should be called from another method in this class that
@@ -1226,6 +1731,8 @@ classdef misc_behr_v3_validation
             p.addParameter('color_by','');
             p.addParameter('match_pandora_aircraft', []);
             p.addParameter('remove_neg_sat', nan);
+            p.addParameter('map_quantity', '');
+            p.addParameter('force_origin', nan);
             
             p.KeepUnmatched = true;
             
@@ -1237,6 +1744,7 @@ classdef misc_behr_v3_validation
             color_by = pout.color_by;
             match_pandora_aircraft = pout.match_pandora_aircraft;
             remove_neg_sat = pout.remove_neg_sat;
+            map_quantity = pout.map_quantity;
             
             [data_structs, opts] = misc_behr_v3_validation.load_comparison_data(varargin{:});
             x_var = opts.x_var;
@@ -1252,13 +1760,16 @@ classdef misc_behr_v3_validation
                 E.badinput('plot_type must be one of: %s', strjoin(allowed_plot_types, ', '));
             end
             
-            allowed_color_bys = {'prof_max', 'prof_num', 'none'};
+            allowed_color_bys = {'prof_max', 'prof_num', 'date', 'none'};
+            allowed_map_quantities = {'abs_diff', 'percent_diff', 'yx_ratio'};
             if strcmpi(plot_type, 'scatter')
                 if isempty(color_by)
                     color_by = ask_multichoice('Color the scatter plot by what?', allowed_color_bys, 'list', true);
                 elseif ~ismember(color_by, allowed_color_bys)
                     E.badinput('color_by must be one of: %s', strjoin(allowed_color_bys), ', ');
                 end
+            elseif strcmpi(plot_type, 'map')
+                map_quantity = opt_ask_multichoice('Which quantity to plot on the map?', allowed_map_quantities, map_quantity, '"map_quantity"', 'list', true);
             end
             
             if isempty(do_remove_outliers)
@@ -1274,20 +1785,26 @@ classdef misc_behr_v3_validation
             end
             
             remove_neg_sat = opt_ask_yn('Remove negative satellite VCDs?', remove_neg_sat, '"remove_neg_sat"');
-
+            force_through_origin = opt_ask_yn('Force fit through origin?', pout.force_origin, '"force_origin"');
+            if force_through_origin
+                regression_type = 'orth-origin';
+            else
+                regression_type = 'RMA';
+            end
+            
             data_lines = gobjects(size(data_structs));
             fit_lines = gobjects(numel(data_structs),1);
             fit_legends = cell(size(fit_lines));
             line_fmts = struct('color', {'k','b','r', [0, 0.5, 0]}, 'marker', {'s','x','^','o'});
-            color_labels = struct('prof_max', 'Max [NO_2] (mixing ratio)', 'prof_num', 'Profile number', 'none', '');
+            color_labels = struct('prof_max', 'Max [NO_2] (mixing ratio)', 'prof_num', 'Profile number', 'date', '', 'none', '');
             fit_data = struct('P',[],'R2',[],'StdDevM',[],'StdDevB',[],'p_value',[], 'num_pts', [], 'is_significant', [], 'x_var', labels.x, 'y_var', labels.y, 'prof_type',legend_strings);
             keep_fit_data = false(size(fit_data));
             
+            is_aircraft = strcmpi(opts.data_source, 'aircraft');
             if match_pandora_aircraft
                 % Is what we were given pandora or aircraft data? If the
                 % time range is 12:30 to 14:30, then it's pandora,
                 % otherwise it's aircraft.
-                is_aircraft = ~strcmpi(opts.data_source, 'aircraft');
                 if is_aircraft
                     PTmp = load(misc_behr_v3_validation.pandora_comp_file);
                     pandora = PTmp.v2.us_monthly;
@@ -1313,7 +1830,7 @@ classdef misc_behr_v3_validation
                 % TODO: handle if request daily profiles for a campaign
                 % that doesn't have them
                 for b=1:numel(data_structs{a})
-                    this_struct = data_structs{a};
+                    this_struct = data_structs{a}(b);
                     
                     if numel(fieldnames(this_struct)) > 1  % data structures with no data will just have the field "campaign"
                         if match_pandora_aircraft
@@ -1353,6 +1870,12 @@ classdef misc_behr_v3_validation
                                 case 'prof_num'
                                     profile_numbers = cellfun(@str2double, this_struct.profile_ids);
                                     color_val = veccat(color_val, profile_numbers);
+                                case 'date'
+                                    if is_aircraft
+                                        color_val = cat(1, color_val, datenum(this_struct.profile_dates));
+                                    else
+                                        color_val = cat(1, color_val, this_struct.omi_time);
+                                    end
                                 case 'none'
                                     % do nothing
                                 otherwise
@@ -1369,8 +1892,7 @@ classdef misc_behr_v3_validation
                         
                         x_no2 = veccat(x_no2, this_struct.x);
                         y_no2 = veccat(y_no2, this_struct.y);
-                        limits(1) = min([limits(1), min(x_no2), min(y_no2)]);
-                        limits(2) = max([limits(2), max(x_no2), max(y_no2)]);
+                        
                     end
                 end
                 
@@ -1382,7 +1904,14 @@ classdef misc_behr_v3_validation
                 x_no2 = x_no2(not_nans);
                 y_no2 = y_no2(not_nans);
                 
+                % Temporary until I fix the imaginary column issue
+                not_imag = difftol(imag(x_no2), zeros(size(x_no2)));
+                x_no2 = x_no2(not_imag);
+                y_no2 = y_no2(not_imag);
+                
                 xx_keep = true(size(x_no2));
+                
+                
                 if remove_neg_sat
                     if any(strcmpi(x_var, {'behr_no2', 'sp_no2'}))
                         xx_keep = xx_keep & x_no2 >= 0;
@@ -1392,11 +1921,15 @@ classdef misc_behr_v3_validation
                     end
                 end
                 
+                
                 if do_remove_outliers
-                    xx_keep = xx_keep & ~isoutlier(x_no2) & ~isoutlier(y_no2);
+                    xx_keep = xx_keep & misc_behr_v3_validation.is_not_outlier(x_no2, y_no2);
                 end
                 
                 if ~isempty(x_no2) && ~isempty(y_no2)
+                    limits(1) = min([min(x_no2), min(y_no2)]);
+                    limits(2) = max([max(x_no2), max(y_no2)]);
+                    
                     if strcmpi(plot_type, 'scatter')
                         if strcmpi(color_by, 'none')
                             data_lines(a) = line(x_no2(xx_keep), y_no2(xx_keep), 'linestyle', 'none', 'color', line_fmts(a).color, 'marker', line_fmts(a).marker);
@@ -1405,10 +1938,15 @@ classdef misc_behr_v3_validation
                             if a == 1
                                 cb = colorbar;
                                 cb.Label.String = color_labels.(color_by);
+                                if strcmpi(color_by, 'date')
+                                    cbdatetick(cb);
+                                    cb.TicksMode = 'manual';
+                                    cb.FontSize = 8;
+                                end
                             end
                             hold on
                         end
-                        [fit_x, fit_y, fit_legends{a}, fit_data_tmp] = calc_fit_line(x_no2(xx_keep), y_no2(xx_keep), 'regression', 'RMA', 'xcoord', [-1e17, 1e17], 'significance', true);
+                        [fit_x, fit_y, fit_legends{a}, fit_data_tmp] = calc_fit_line(x_no2(xx_keep), y_no2(xx_keep), 'regression', regression_type, 'xcoord', [-1e17, 1e17], 'significance', true);
                         fit_lines(a) = line(fit_x, fit_y, 'color', line_fmts(a).color, 'linestyle', '--');
                         
                         fit_data(a) = copy_structure_fields(fit_data_tmp, fit_data(a), fieldnames(fit_data_tmp));
@@ -1417,15 +1955,42 @@ classdef misc_behr_v3_validation
                         data_lines(a) = line(lon(xx_keep), y_no2(xx_keep) - x_no2(xx_keep), 'linestyle', 'none', 'marker', line_fmts(a).marker, 'color', line_fmts(a).color);
                     elseif strcmpi(plot_type, 'map')
                         fig(a) = figure;
-                        scatter(lon(xx_keep), lat(xx_keep), [], y_no2(xx_keep) - x_no2(xx_keep));
+                        
+                        used_log = false;
+                        switch lower(map_quantity)
+                            case 'abs_diff'
+                                diff_quantity = y_no2(xx_keep) - x_no2(xx_keep);
+                                clabel_str = '\Delta VCD (molec. cm^{-2})';
+                            case 'percent_diff'
+                                diff_quantity = reldiff(y_no2(xx_keep), x_no2(xx_keep))*100;
+                                clabel_str = '%\Delta VCD (molec. cm^{-2})';
+                            case 'yx_ratio'
+                                diff_quantity = y_no2(xx_keep) ./ x_no2(xx_keep);
+                                if all(diff_quantity > 0)
+                                    diff_quantity = log10(diff_quantity);
+                                    used_log = true;
+                                else
+                                    warning('Negative Y/X ratios, cannot use log scale');
+                                end
+                                clabel_str = 'Y/X';
+                            otherwise
+                                E.notimplemented('No method for map_quantity = %s', map_quantity);
+                        end
+                        
+                        scatter(lon(xx_keep), lat(xx_keep), [], diff_quantity);
                         %set(gca,'xlimmode','manual');
-                        title(sprintf('%s - %s: %s', labels.(y_var), labels.(x_var), legend_strings{a}));
+                        title(sprintf('%s -\n %s: %s', labels.(y_var), labels.(x_var), legend_strings{a}));
                         cb = colorbar;
-                        cb.Label.String = '\Delta VCD (molec. cm^{-2})';
+                        cb.Label.String = clabel_str;
                         state_outlines('k','not','ak','hi');
                         set(gca,'fontsize',16);
-                        caxis(calc_plot_limits(y_no2(xx_keep) - x_no2(xx_keep), 'diff'));
-                        colormap(blue_red_only_cmap)
+                        caxis(calc_plot_limits(diff_quantity, 'diff'));
+                        if ~strcmpi(diff_quantity, 'yx_ratio') || used_log
+                            colormap(blue_red_only_cmap)
+                        end
+                        if used_log
+                            cb.TickLabels = sprintfmulti('%.2f', 10.^(cb.Ticks));
+                        end
                         
                         misc_behr_v3_validation.plot_sites(gca, 'site_type', 'Cities');
                     elseif strcmpi(plot_type, 'pres top')
@@ -1473,7 +2038,7 @@ classdef misc_behr_v3_validation
                 line(x_edges, [0 0], 'linestyle', '--', 'linewidth', 2, 'color', [0.5 0.5 0.5]);
                 legend(data_lines, legend_strings);
                 xlabel('Pressure at top measurement');
-                ylabel(sprintf('%s - %s', labels.(y_var), labels.(x_var)));
+                ylabel(sprintf('%s -\n %s', labels.(y_var), labels.(x_var)));
                 set(gca,'fontsize',16);
             end
             
@@ -1482,7 +2047,7 @@ classdef misc_behr_v3_validation
             end
         end
         
-        function plot_aircraft_vs_pandora_locations(varargin)
+        function [pandora_far_coords, pandora_close_coords, aircraft_coords, cluster_coords] = plot_aircraft_vs_pandora_locations(varargin)
             %
             p = inputParser;
             p.addParameter('campaigns', {});
@@ -1519,8 +2084,10 @@ classdef misc_behr_v3_validation
             end
             
             aircraft_coords = [];
+            cluster_coords = [];
             pandora_close_coords = [];
             pandora_far_coords = [];
+            
             
             for i_campaign = 1:numel(campaigns)
                 pandora_comp = pandoras.v3.us_monthly.(campaigns{i_campaign}).t1230_1430;
@@ -1529,19 +2096,95 @@ classdef misc_behr_v3_validation
                 [~, pandora_close_comp] = misc_behr_v3_validation.match_aircraft_and_pandora_sites(aircraft_comp, pandora_comp);
                 xx_far = ~ismember(pandora_comp.profile_lon, pandora_close_comp.profile_lon) & ~ismember(pandora_comp.profile_lat, pandora_close_comp.profile_lat);
                 
-                aircraft_coords = cat(1, aircraft_coords, [aircraft_comp.profile_lon(:), aircraft_comp.profile_lat(:)]);
+                this_aircraft_coords = [aircraft_comp.profile_lon(:), aircraft_comp.profile_lat(:)];
+                aircraft_coords = cat(1, aircraft_coords, this_aircraft_coords);
                 platlon_far_temp = unique([pandora_comp.profile_lon(xx_far), pandora_comp.profile_lat(xx_far)],'rows');
                 pandora_far_coords = cat(1, pandora_far_coords, platlon_far_temp);
                 platlon_close_temp = unique([pandora_close_comp.profile_lon(:), pandora_close_comp.profile_lat(:)],'rows');
                 pandora_close_coords = cat(1, pandora_close_coords, platlon_close_temp);
+                
+                % If we're doing a discover campaign, try to cluster the
+                % aircraft profiles using kmeans so that we get one point
+                % per profile.
+                if regcmpi(campaigns{i_campaign}, '^discover')
+                    profnums = cellfun(@(x) floor(str2double(x)/1000), aircraft_comp.profile_ids);
+                    n_profs = numel(unique(profnums));
+                    [~, this_cluster_means] = kmeans(this_aircraft_coords, n_profs);
+                    cluster_coords = cat(1, cluster_coords, this_cluster_means);
+                end
+            end
+            leg_strs = {'Pandora too far', 'Pandora nearby', 'Aircraft'};
+            figure;
+            l(1) = line(pandora_far_coords(:,1), pandora_far_coords(:,2), 'marker', 'x', 'linestyle', 'none', 'color', 'r');
+            l(2) = line(pandora_close_coords(:,1), pandora_close_coords(:,2), 'marker', 'x', 'linestyle', 'none', 'color', [0 0.5 0]);
+            l(3) = line(aircraft_coords(:,1), aircraft_coords(:,2), 'marker', 's', 'linestyle', 'none', 'color', 'b');
+            if ~isempty(cluster_coords)
+                l(4) = line(cluster_coords(:,1), cluster_coords(:,2), 'marker', '^', 'linestyle', 'none', 'color', 'c');
+                leg_strs{end+1} = 'Aircraft cluster';
+            end
+            state_outlines('k');
+            legend(l(:), leg_strs);
+        end
+        
+        function plot_measured_no2(varargin)
+            E = JLLErrors;
+            p = inputParser;
+            p.addParameter('campaign', '');
+            p.addParameter('prof_type', '');
+            p.addParameter('bottom_pres', []);
+            p.addParameter('top_pres', []);
+            p.addParameter('plot_quantity', '');
+            
+            p.parse(varargin{:});
+            pout = p.Results;
+            
+            wrfcomp = load(misc_behr_v3_validation.wrf_comp_file);
+            
+            allowed_campaigns = fieldnames(wrfcomp.monthly);
+            campaign = opt_ask_multichoice('Which campaign?', allowed_campaigns, pout.campaign , '"campaign"', 'list', true);
+            
+            avail_prof_types = fieldnames(wrfcomp);
+            xx_profs = false(size(avail_prof_types));
+            for i_prof = 1:numel(avail_prof_types)
+                xx_profs(i_prof) = isfield(wrfcomp.(avail_prof_types{i_prof}), campaign);
+            end
+            allowed_prof_types = avail_prof_types(xx_profs);
+            prof_type = opt_ask_multichoice('Which profile type?', allowed_prof_types, pout.prof_type , '"campaign"', 'list', true);
+            
+            bottom_pres = opt_ask_number('Give the bottom pressure to include, in hPa', pout.bottom_pres, '"bottom_pres"', 'testfxn', @(x) isscalar(x) && isnumeric(x) && x > 0 , 'testmsg', 'Bottom pressure must be a positive scalar');
+            top_pres = opt_ask_number('Give the top pressure to include, in hPa', pout.top_pres, '"top_pres"', 'testfxn', @(x) isscalar(x) && isnumeric(x) && x >= 0 && x < bottom_pres,...
+                'testmsg', sprintf('Top pressure must be a positive scalar less than the bottom pressure (%.1f)', bottom_pres));
+            plot_quantity = opt_ask_multichoice('Which quantity to plot?', {'Aircraft NO2', 'WRF NO2', 'Aircraft - WRF NO2'}, pout.plot_quantity, '"plot_quantity"', 'list', true);
+            
+            comp_struct = wrfcomp.(prof_type).(campaign).All.match;
+            
+            air_pres = comp_struct.data.pres;
+            xx = air_pres <= bottom_pres & air_pres >= top_pres;
+            
+            air_no2 = comp_struct.data.no2(xx);
+            wrf_no2 = comp_struct.wrf.no2(xx);
+            lon = comp_struct.data.lon(xx);
+            lat = comp_struct.data.lat(xx);
+            
+            switch lower(plot_quantity)
+                case 'aircraft no2'
+                    plot_vals = air_no2;
+                    clabel_str = 'Aircraft NO2 between %.1f and %.1f hPa';
+                case 'wrf no2'
+                    plot_vals = wrf_no2;
+                    clabel_str = 'WRF NO2 between %.1f and %.1f hPa';
+                case 'aircraft - wrf no2'
+                    plot_vals = air_no2 - wrf_no2;
+                    clabel_str = 'Aircraft - WRF NO2 between %.1f and %.1f hPa';
+                otherwise
+                    E.notimplemented('No case for plot_quantity = %s', plot_quantity);
             end
             
             figure;
-            l(1) = line(aircraft_coords(:,1), aircraft_coords(:,2), 'marker', 's', 'linestyle', 'none', 'color', 'b');
-            l(2) = line(pandora_far_coords(:,1), pandora_far_coords(:,2), 'marker', 'x', 'linestyle', 'none', 'color', 'r');
-            l(3) = line(pandora_close_coords(:,1), pandora_close_coords(:,2), 'marker', 'x', 'linestyle', 'none', 'color', [0 0.5 0]);
+            scatter(lon, lat, [], plot_vals);
+            cb = colorbar;
+            cb.Label.String = sprintf(clabel_str, bottom_pres, top_pres);
             state_outlines('k');
-            legend(l(:), {'Aircraft', 'Pandora too far', 'Pandora nearby'});
         end
         
         function varargout = plot_one_wrf_comparison(prof_types, campaign, prof_number, uncert_type, varargin)
@@ -1743,7 +2386,7 @@ classdef misc_behr_v3_validation
             air_no2 = air_no2(xx_sort);
             
             % Scale pressure to make the scatter a reasonable size.
-            size_from_pres = scale_to_range(air_pres, [50 200]);   
+            size_from_pres = scale_to_range(air_pres, [50 200]);
             
             figure;
             pcolor(wrf_loncorn, wrf_latcorn, wrf_no2);
@@ -1889,7 +2532,7 @@ classdef misc_behr_v3_validation
             end
         end
         
-        function varargout = plot_scd_vs_wrf_columns(location_name, start_date, end_date, varargin)
+        function varargout = plot_scd_vs_wrf_columns(varargin)
             % Plots OMI tropospheric SCDs, WRF monthly, and WRF daily
             % columns for a given date range to show whether WRF is
             % capturing the wind direction correctly. If daily BEHR files
@@ -1897,22 +2540,26 @@ classdef misc_behr_v3_validation
             % just be skipped.
             
             E = JLLErrors;
-            p = inputParser;
+            p = advInputParser;
+            p.addOptional('location_name', '', @(x) ischar(x) || isstruct(x));
+            p.addOptional('start_date', '', @(x) ischar(x) || isnumeric(x));
+            p.addOptional('end_date', '', @(x) ischar(x) || isnumeric(x));
             p.addParameter('max_frac_nans', 0);
+            p.addParameter('titles', true);
             
             p.parse(varargin{:});
             pout = p.Results;
             
+            location_name = pout.location_name;
+            start_date = pout.start_date;
+            end_date = pout.end_date;
             max_frac_nans = pout.max_frac_nans;
+            include_titles = pout.titles;
             
-            if nargin == 2
-                E.badinput('Must give 0, 1, or >= 3 inputs')
-            end
-            
-            if nargin == 0 || nargin >= 3
+            if ischar(location_name)
                 locs = misc_behr_v3_validation.read_locs_file();
                 loc_names = {locs.ShortName};
-                if ~exist('location_name', 'var')
+                if isempty(location_name)
                     loc_ind = ask_multichoice('Choose a location', loc_names, 'list', true, 'index', true);
                 elseif ~ismember(location_name, loc_names)
                     E.badinput('LOCATION_NAME must be one of: %s', strjoin(loc_names, ', '));
@@ -1922,13 +2569,13 @@ classdef misc_behr_v3_validation
                 
                 plot_loc = locs(loc_ind);
                 
-                if ~exist('start_date', 'var')
+                if isempty(start_date)
                     start_date = datenum(ask_date('Enter the start date'));
                 else
                     start_date = validate_date(start_date);
                 end
                 
-                if ~exist('end_date', 'var')
+                if isempty(end_date)
                     end_date = datenum(ask_date('Enter the end date'));
                 else
                     end_date = validate_date(end_date);
@@ -1936,7 +2583,7 @@ classdef misc_behr_v3_validation
                 
                 dvec = start_date:end_date;
                 load_data = true;
-            elseif nargin == 1
+            elseif isstruct(location_name)
                 % if given one input, it must be a structure of results
                 if ~isstruct(location_name)
                     E.badinput('With one input, it must be a structure of results')
@@ -1950,10 +2597,15 @@ classdef misc_behr_v3_validation
                 % Load the daily BEHR file, if it exists
                 if load_data
                     try
-                        [behr_daily, wrf_monthly, wrf_daily] = misc_behr_v3_validation.load_wrf_and_behr_data(plot_loc, dvec(d));
+                        [behr_daily, wrf_monthly, wrf_daily] = misc_behr_v3_validation.load_wrf_and_behr_data(plot_loc, dvec(d), 'max_frac_nans', max_frac_nans);
                     catch err
                         if strcmp(err.identifier, 'MATLAB:load:couldNotReadFile')
                             fprintf('No BEHR daily profile file available for %s\n', datestr(dvec(d)));
+                            % Create empty structs in case we need to
+                            % return after this date
+                            behr_daily = struct('lon', {{}},'lat', {{}}, 'no2_scds', {{}}, 'no2_vcds', {{}});
+                            wrf_monthly = struct('lon', {{}},'lat', {{}}, 'no2_vcds', {{}});
+                            wrf_daily = struct('lon', {{}},'lat', {{}}, 'no2_vcds', {{}});
                             continue
                         else
                             rethrow(err)
@@ -1967,13 +2619,8 @@ classdef misc_behr_v3_validation
                     plot_loc.Latitude = results(d).loc_latitude;
                 end
                 
-                xx_keep = true(size(behr_daily));
-                
+                fig = [];
                 for a=1:numel(behr_daily.lon)
-                    if fracnan(behr_daily.no2_scds{1}) > max_frac_nans
-                        xx_keep(a) = false;
-                        continue
-                    end
                     
                     % Make the plot, 3 side-by-side figures
                     fig=figure;
@@ -1983,35 +2630,39 @@ classdef misc_behr_v3_validation
                         if p==1
                             % Convert VCD back to SCD
                             pcolor(behr_daily.lon{a}, behr_daily.lat{a}, behr_daily.no2_scds{a});
-                            title('OMI Trop. SCD');
+                            if include_titles
+                                title('OMI Trop. SCD');
+                            end
                         elseif p==2
                             pcolor(wrf_monthly.lon, wrf_monthly.lat, wrf_monthly.no2_vcds);
-                            title('Monthly WRF');
+                            if include_titles
+                                title('Monthly WRF');
+                            end
                         elseif p==3
-                            pcolor(wrf_daily.lon, wrf_daily.lat, wrf_daily.no2_vcds);
-                            title('Daily WRF');
+                            pcolor(wrf_daily.lon{a}, wrf_daily.lat{a}, wrf_daily.no2_vcds{a});
+                            if include_titles
+                                title('Daily WRF');
+                            end
                         else
                             E.notimplemented('>3 plots')
                         end
                         
                         %caxis([0 1e16]);
-                        colorbar;
+                        cb=colorbar;
+                        cb.Label.String = 'molec. cm^{-2}';
                         line(plot_loc.Longitude, plot_loc.Latitude, 'linestyle', 'none', 'marker', 'p', 'color', 'w', 'markersize',16,'linewidth',2);
                         set(gca,'fontsize',14);
                     end
                 end
                 
-                fns = fieldnames(behr_daily);
-                for i_fn = 1:numel(fns)
-                    behr_daily.(fns{i_fn})(~xx_keep) = [];
-                end
                 
-                if nargout > 0
-                    if numel(dvec) > 1
-                        E.notimplemented('Returning data when >1 day requested');
-                    end
-                    varargout = {behr_daily, wrf_monthly, wrf_daily};
+            end
+            
+            if nargout > 0
+                if numel(dvec) > 1
+                    E.notimplemented('Returning data when >1 day requested');
                 end
+                varargout = {behr_daily, wrf_monthly, wrf_daily, fig};
             end
         end
         
@@ -2127,6 +2778,7 @@ classdef misc_behr_v3_validation
             p.addParameter('titles', true);
             p.addParameter('region', 'us');
             p.addParameter('change_field', '')
+            p.addParameter('normalize_by', '');
             
             p.parse(varargin{:});
             pout = p.Results;
@@ -2134,6 +2786,7 @@ classdef misc_behr_v3_validation
             include_titles = pout.titles;
             region = pout.region;
             change_field = opt_ask_multichoice('Which field to plot?', {'PercentChangeNO2', 'PercentChangeNO2Vis', 'PercentChangeAMF', 'PercentChangeAMFVis'}, pout.change_field, '"change_field"', 'list', true);
+            normalize_by = opt_ask_multichoice('Normalize the uncertainty in the bar plot by:', {'None', 'Percent difference', 'Absolute difference'}, pout.normalize_by, '"normalize_by"', 'list', true);
             
             % First we need to get what uncertainty parameters are
             % available and for which months. The months should be the same
@@ -2142,26 +2795,54 @@ classdef misc_behr_v3_validation
             
             F = dir(behr_paths.BEHRUncertSubdir(region));
             uncert_params = {F([F.isdir]).name};
-            % Need to remove . and ..
+            % Need to remove ., .., and BaseCase
             uncert_params(regcmp(uncert_params, '\.+')) = [];
+            uncert_params(strcmp(uncert_params, 'BaseCase')) = [];
             
             % Assume for now that there's four month of uncertainty
             uncertainties = make_empty_struct_from_cell(uncert_params);
             
-            
+            plot_param_in_bar_graph = true(size(uncert_params));
+            switch lower(normalize_by)
+                case 'none'
+                    input_diff_fxn = @(A,B,denom) ones(size(A));
+                    plot_in_bar_if_cant_norm = true;
+                    bar_y_label = '% uncertainty';
+                case 'percent difference'
+                    input_diff_fxn = @(A,B,denom) reldiff(A,B)*100./denom;
+                    plot_in_bar_if_cant_norm = false;
+                    bar_y_label = '%\Delta VCD / %\Delta input';
+                case 'absolute difference'
+                    input_diff_fxn = @(A,B,denom) (A - B)./denom;
+                    plot_in_bar_if_cant_norm = false;
+                    bar_y_label = '%\Delta VCD / \Delta input';
+                otherwise
+                    E.notimplemented('No calculation implemented for normalize_by = "%s"', normalize_by)
+            end
             
             for i_param = 1:numel(uncert_params)
                 fprintf('Loading %s files: ', uncert_params{i_param});
                 
-                uncert_files = dirff(fullfile(behr_paths.BEHRUncertSubdir(region), uncert_params{i_param}, 'BEHR*.mat'));
-                file_dates = cellfun(@(x) datenum(regexp(x, '\d{6}(?=.mat)', 'match', 'once'), 'yyyymm'), {uncert_files.name});
+                uncert_files_tmp = dirff(fullfile(behr_paths.BEHRUncertSubdir(region), uncert_params{i_param}, 'BEHR*.mat'));
+                % Order the files DJF, MAM, JJA, SON. The default
+                % alphabetical order is very strange to see in the plot.
+                if numel(uncert_files_tmp) ~= 4
+                    E.notimplemented('Not 4 uncertainty files')
+                end
+                regexes = {'DJF', 'MAM', 'JJA', 'SON'};
+                uncert_names = {uncert_files_tmp.name};
+                for i_re = 1:numel(regexes)
+                    uncert_files(i_re) = uncert_files_tmp(regcmp(uncert_names, regexes{i_re}));
+                end
+                
+                file_dates = cellfun(@(x) regexp(x, '(DJF|MAM|JJA|SON)', 'match', 'once'), {uncert_files.name}, 'UniformOutput', false);
                 if i_param == 1
                     check_file_dates = file_dates;
                 elseif ~isequal(file_dates, check_file_dates)
                     E.notimplemented('Different parameters produced for different months');
                 end
                 
-                substruct = make_empty_struct_from_cell({'date', 'percent_diff'}, cell(size(uncert_files)));
+                substruct = make_empty_struct_from_cell({'date', 'percent_diff', 'norm_factor'}, cell(size(uncert_files)));
                 
                 for i_file = 1:numel(uncert_files)
                     UAvg = load(uncert_files(i_file).name);
@@ -2169,11 +2850,49 @@ classdef misc_behr_v3_validation
                     
                     fprintf('%d ', i_file);
                     
+                    error_fields = fieldnames(ErrorAvg);
+                    xx_base_fn = regcmp(error_fields, 'Base$');
+                    if sum(xx_base_fn) == 1
+                        base_field = error_fields{xx_base_fn};
+                        perturbed_field = regexprep(base_field, 'Base$', '');
+                        this_input_diff_fxn = input_diff_fxn;
+                        % If we can normalize this parameter, always plot
+                        % it in the bar graph
+                    elseif sum(xx_base_fn) == 0
+                        base_field = change_field;
+                        perturbed_field = change_field;
+                        this_input_diff_fxn = @(A,B,denom) ones(size(A));
+                        % If we can't normalize this parameter, whether we
+                        % plot it depends on if we're trying to normalize
+                        % or not
+                        plot_param_in_bar_graph(i_param) = plot_in_bar_if_cant_norm;
+                    else
+                        E.callError('multiple_base_fields','Multiple fields found matching the regular expression "Base$"');
+                    end
+                    
                     substruct(i_file).date = file_dates(i_file);
                     if numel(ErrorAvg) == 1
                         perdiff = ErrorAvg.(change_field);
+                        input_diff = this_input_diff_fxn(ErrorAvg.(perturbed_field), ErrorAvg.(base_field), 1);
                     elseif numel(ErrorAvg) == 2
+                        % If we calculated a percent difference by raising
+                        % and lowering the perturbed value, this will
+                        % effectively calculate a mean percent difference.
+                        % I do it this way rather than summing and dividing
+                        % by two or summing the absolute value and dividing
+                        % by two to keep the sign. This assumes implicitly
+                        % that the change w.r.t. the input parameter is
+                        % monotonic; if, e.g. increasing or decreasing the
+                        % input parameter both increased the NO2 VCDs, then
+                        % this method will calculate a reduced uncertainty
+                        % than if we summed or just took one side. However,
+                        % I argue that is both unlikely and, even if it
+                        % happens, correct because the range over which the
+                        % VCDs varies is smaller in that case than if it
+                        % was monotonically increasing or decreasing with
+                        % the input parameter.
                         perdiff = (ErrorAvg(2).(change_field) - ErrorAvg(1).(change_field))./2;
+                        input_diff = this_input_diff_fxn(ErrorAvg(2).(perturbed_field), ErrorAvg(1).(perturbed_field), 2);
                     else
                         E.notimplemented('numel(ErrorAvg) > 2')
                     end
@@ -2181,10 +2900,15 @@ classdef misc_behr_v3_validation
                     % uncertainty. Restrict to 3 sigma.
                     %perdiff(abs(perdiff) > 3*nanstd(perdiff)) = nan;
                     substruct(i_file).percent_diff = perdiff;
+                    substruct(i_file).norm_factor = input_diff;
                 end
                 uncertainties.(uncert_params{i_param}) = substruct;
                 fprintf('\n');
             end
+            
+            % Whether we include the total in the bar graph depends on
+            % whether we're including parameters than can't be normalized.
+            plot_param_in_bar_graph(end+1) = plot_in_bar_if_cant_norm;
             
             % Now we want to plot the quadrature sum of all contributions
             % to the uncertainty for each month, and a plot of the average
@@ -2212,62 +2936,566 @@ classdef misc_behr_v3_validation
                 pAvg = RunningAverage();
                 for i_param = 1:n_params
                     this_struct = uncertainties.(uncert_params{i_param})(i_month);
-                    if this_struct.date ~= check_file_dates(i_month)
+                    if ~strcmp(this_struct.date, check_file_dates{i_month})
                         E.callError('wrong_date', 'Dates in substruct out of order compared to what was expected')
                     end
                     pAvg.addData((this_struct.percent_diff).^2);
-                    mean_contributions(i_month, i_param) = abs(nanmean(this_struct.percent_diff(:)));
-                    contribution_sigmas(i_month, i_param) = nanstd(this_struct.percent_diff(:));
-                    median_contributions(i_month, i_param) = nanmedian(abs(this_struct.percent_diff(:)));
-                    contribution_quantiles(:, i_month, i_param) = quantile(abs(this_struct.percent_diff(:)),[0.05;0.95]);
+                    this_norm_perdiff = this_struct.percent_diff(:) ./ this_struct.norm_factor(:);
+                    mean_contributions(i_month, i_param) = abs(nanmean(this_norm_perdiff));
+                    contribution_sigmas(i_month, i_param) = nanstd(this_norm_perdiff);
+                    median_contributions(i_month, i_param) = nanmedian(abs(this_norm_perdiff));
+                    contribution_quantiles(:, i_month, i_param) = quantile(abs(this_norm_perdiff),[0.05;0.95]);
                 end
                 subplot(3,2,i_month);
-                perdiff = sqrt(pAvg.getWeightedAverage());
+                perdiff = sqrt(pAvg.values());
                 mean_contributions(i_month, end) = nanmean(abs(perdiff(:)));
                 contribution_sigmas(i_month, end) = nanstd(abs(perdiff(:)));
                 median_contributions(i_month, end) = nanmedian(abs(perdiff(:)));
                 contribution_quantiles(:, i_month, end) = quantile(abs(perdiff(:)), [0.05; 0.95]);
                 
+                % This would make the plots look nicer
+                %perdiff(isnan(perdiff)) = 0;
                 pcolor(lon, lat, perdiff);
                 shading flat
                 caxis(calc_plot_limits(perdiff, 'zero', 'max', [0 200]));
                 cb = colorbar;
                 cb.Label.String = 'Total % Uncertainty';
                 set(gca, 'fontsize', 14);
-                state_outlines('k');
+                state_outlines('w');
                 if include_titles
-                    title(datestr(check_file_dates(i_month), 'mmm yyyy'));
+                    title(check_file_dates{i_month});
                 end
+                label_subfigs(gcf, 'xshift', 0.2)
             end
             
             ax = subplot(3,2,n_months+1);
-            %bar(median_contributions);
-            %bar_errors(median_contributions, squeeze(contribution_quantiles(1,:,:)), squeeze(contribution_quantiles(2,:,:)));
+            %bar(median_contributions(:, plot_param_in_bar_graph));
+            %bar_errors(median_contributions(:, plot_param_in_bar_graph), squeeze(contribution_quantiles(1,:,plot_param_in_bar_graph)), squeeze(contribution_quantiles(2,:,plot_param_in_bar_graph)));
             
-            bar(mean_contributions);
-            %bar_errors(mean_contributions, contribution_sigmas(:,:));
+            bar(mean_contributions(:, plot_param_in_bar_graph));
+            %bar_errors(mean_contributions(:, plot_param_in_bar_graph), contribution_sigmas(:,plot_param_in_bar_graph));
             
-            set(gca, 'ygrid', 'on', 'xticklabel', cellstr(datestr(check_file_dates, 'mmm yyyy')));
-            legend(uncert_params{:}, 'Total', 'Location', 'eastoutside');
+            set(gca, 'ygrid', 'on', 'xticklabel', check_file_dates);
+            legend_parms = veccat(uncert_params, 'Total');
+            legend(legend_parms{plot_param_in_bar_graph}, 'Location', 'eastoutside');
             % Expand this plot to fill the width of the figure with some
             % room for the legend
             ax.Position(3) = 1.8*ax.Position(3);
             %ch = get(gcf,'children');
             %center_axes(ax, ch(4), ch(6));
             set(gca,'fontsize',14);
-            ylabel('% uncertainty')
+            ylabel(bar_y_label)
+        end
+        
+        function fig = plot_prof_regression(varargin)
+            % This function will plot the R2 value at each model level for
+            % either the profile concentration or shape factor between WRF
+            % and aircraft profiles
+            %
+            %   'campaigns' - which campaigns to include, as a cell array
+            %
+            %   'versions' - which versions to include (v2, monthly, daily)
+            %   as a cell array of strings
+            %
+            %   'title' - boolean, whether or not to include titles (which
+            %   will be the campaign name). Default is true.
+            %
+            %   'with_diffs' - boolean, whether or not to include bar
+            %   graphs of the differences in R2 if exactly two versions
+            %   requested. Default is true.
+            %
+            %   'num_pts' - boolean, whether to include the number of
+            %   comparisons that went into each R2 calculation on the
+            %   difference plot. Has no effect if numel(versions) ~= 2.
+            %   Default is true.
+            
+            p = advInputParser;
+            p.addParameter('campaigns', '');
+            p.addParameter('versions', {});
+            p.addParameter('title',true);
+            p.addParameter('with_diffs',true);
+            p.addParameter('num_pts',true);
+            
+            p.parse(varargin{:});
+            pout = p.Results;
+            
+            wrf_comp = load(misc_behr_v3_validation.wrf_comp_file);
+            available_campaigns = fieldnames(wrf_comp.v2);
+            
+            include_title = pout.title;
+            include_diffs = pout.with_diffs;
+            include_num_pts = pout.num_pts;
+            
+            campaigns = opt_ask_multiselect('Which campaigns to plot?', available_campaigns, pout.campaigns, '"campaign"');
+            
+            available_versions = {'v2','monthly'};
+            if isfield(wrf_comp.daily, campaigns)
+                available_versions = veccat(available_versions, 'daily');
+            end
+            versions = opt_ask_multiselect('Which versions to include?', available_versions, pout.versions, '"versions"');
+            
+            include_diffs = include_diffs && numel(versions) == 2;
+            
+            plot_colors = misc_behr_v3_validation.plot_colors;
+            plot_markers = misc_behr_v3_validation.plot_markers;
+            plot_leg_str = misc_behr_v3_validation.versions2legend(versions);
+            
+            fig = figure;
+            if include_diffs
+                subplot_x = 2;
+            else
+                subplot_x = 1;
+            end
+            subplot_y = numel(campaigns);
+            
+            % We only want to label the first axes in each row, not the
+            % differences.
+            axes_to_label = gobjects(subplot_y, 1);
+            
+            for i_cam = 1:numel(campaigns)
+                this_campaign = campaigns{i_cam};
+                
+                if include_diffs
+                    subplot_ind = (i_cam-1)*2 + 1;
+                else
+                    subplot_ind = i_cam;
+                end
+                
+                left_ax = subplot(subplot_y, subplot_x, subplot_ind);
+                axes_to_label(i_cam) = left_ax;
+                
+                r2 = [];
+                num_pts = [];
+                for i_version = 1:numel(versions)
+                    this_version = versions{i_version};
+                    [r2(:,i_version), pres_bins, num_pts(:,i_version)] = misc_behr_v3_validation.calculate_profile_regressions(wrf_comp.(this_version).(this_campaign));
+                end
+                
+                % Plot the individual levels' R2 values, only including
+                % levels where all versions have an R2 value. Some may not
+                % have an R2 value in some levels due to differences in
+                % pressure for each WRF point between the versions.
+                notnans = all(~isnan(r2),2);
+                bin_number = (1:size(r2,1))';
+                plot_ylim = [find(notnans,1,'first')-1, find(notnans,1,'last')+1];
+                i_lastval = find(notnans,1,'last');
+                l = gobjects(numel(versions),1);
+                for i_version = 1:numel(versions)
+                    this_version = versions{i_version};
+                    if plot_markers.(this_version).filled
+                        extra_args = {'markerfacecolor', plot_colors.(this_version).avg};
+                    else
+                        extra_args = {};
+                    end
+                    % Plot using model level as the y-coordinate to avoid
+                    % squishing up the bottom levels that are closer in
+                    % pressure.
+                    l(i_version) = line(r2(notnans,i_version), bin_number(notnans), 'color', plot_colors.(this_version).avg, 'marker', plot_markers.(this_version).avg, 'linestyle','none','markersize',10,'linewidth',2, extra_args{:});
+                end
+                
+                % Only put the legend on the first plot.
+                if i_cam == 1
+                    legend(plot_leg_str)
+                end
+                % Since we plotted with model level as the y-coordinate,
+                % redo the ticks to be pressure. I just randomly picked
+                % every 4 levels to give a decent spacing.
+                set(gca,'ytick',bin_number(1:4:i_lastval),'yticklabel',pres_bins(1:4:i_lastval), 'fontsize', 16, 'ygrid', 'on');
+                xlabel('R^2');
+                ylabel('Pressure (hPa)');
+                if include_title
+                    title(upper(strrep(this_campaign,'_','-')))
+                end
+                
+                if include_num_pts
+                    combined_num_pts_strings = cell(size(num_pts,1),1);
+                    for i_level = 1:size(num_pts,1)
+                        combined_num_pts_strings{i_level} = sprintf('(%d, %d)', num_pts(i_level,1), num_pts(i_level,2));
+                    end
+                end
+                
+                % If we're plotting exactly 2 versions and we want to
+                % include diffs, add them now.
+                if numel(versions) == 2 && include_diffs
+                    set(gca,'ylim', plot_ylim);
+                    right_ax = subplot(subplot_y, subplot_x, subplot_ind+1);
+                    r2_diffs = r2(:,2) - r2(:,1);
+                    pos_diffs = r2_diffs > 0;
+                    positive_bars = barh(bin_number(pos_diffs), r2_diffs(pos_diffs), plot_colors.(versions{2}).avg);
+                    hold on
+                    negative_bars = barh(bin_number(~pos_diffs), r2_diffs(~pos_diffs), plot_colors.(versions{1}).avg);
+                    
+                    if include_num_pts
+                        text(positive_bars.YData*1.1, positive_bars.XData, combined_num_pts_strings(positive_bars.XData));
+                        text(negative_bars.YData*1.1, negative_bars.XData, combined_num_pts_strings(negative_bars.XData), 'HorizontalAlignment', 'right');
+                        plot_xlims = calc_plot_limits(r2_diffs*1.5, 0.2);
+                    else
+                        plot_xlims = calc_plot_limits(r2_diffs, 0.2);
+                    end
+                    
+                    set(gca, 'fontsize', 16, 'ylim', plot_ylim, 'ytick', [], 'xlim', plot_xlims);
+                    xlabel(sprintf('R^2 %s - R^2 %s', plot_leg_str{2}, plot_leg_str{1}));
+                    
+                    % Shift the axes so that the profiles have more space than
+                    % the differences, and make sure their size in the
+                    % y-dimension is the same
+                    shift = 0.1;
+                    right_ax.Position = right_ax.Position + [shift, 0, -shift, 0];
+                    right_ax.Position([2 4]) = left_ax.Position([2 4]);
+                    left_ax.Position(3) = left_ax.Position(3) + shift;
+                end
+            end
+            
+            % Give the plots a little more size
+            fig.Position(3:4) = fig.Position(3:4) .* [1.5 subplot_y*1.2];
+            
+            if ~include_title
+                label_subfigs(gcf, 'xshift', 0.2, 'ax', axes_to_label);
+            end
+        end
+        
+        function [r2_vals, pres_bins, num_pts] = calculate_profile_regressions(prof_struct, varargin)
+            % prof_struct should be one campaign's structure from the wrf
+            % comparison file.
+            
+            p = advInputParser;
+            % y-resid and rma seem to return the same R^2 values
+            p.addParameter('reg_type', 'y-resid');
+            % If I need to add shape factors for a reviewer (because they
+            % seem to love shape factors) probably the simplest way would
+            % be to calculate a partial VCD just for the extent that the
+            % aircraft covers
+            
+            p.parse(varargin{:});
+            pout = p.Results;
+            
+            reg_type = pout.reg_type;
+            
+            E = JLLErrors;
+            % First, get the list of individual profiles. If there are
+            % none, throw and error b/c this only works for DISCOVER-type
+            % campaigns
+            fns = fieldnames(prof_struct);
+            fns = fns(regcmp(fns, 'p\d+'));
+            if isempty(fns)
+                E.badinput('Must pass a profile structure containing at least one field named p#### or p######')
+            end
+            n_profs = numel(fns);
+            
+            % Now we need to loop through each profile field and bin the
+            % WRF and aircraft data for that profile into pressure bins. If
+            % this is the first profile, use the size of the bin vectors to
+            % initialize the full array for the profiles.
+            for i_prof = 1:n_profs
+                wrf_pres = prof_struct.(fns{i_prof}).match.wrf.pres;
+                wrf_no2 = prof_struct.(fns{i_prof}).match.wrf.no2;
+                air_pres = prof_struct.(fns{i_prof}).match.data.pres;
+                air_no2 = prof_struct.(fns{i_prof}).match.data.no2;
+                
+                [wrf_no2_binned, pres_bins] = bin_omisp_pressure(wrf_pres, wrf_no2, 'mean');
+                air_no2_binned = bin_omisp_pressure(air_pres, air_no2, 'mean');
+                
+                if ~isequal(size(wrf_no2_binned), size(air_no2_binned))
+                    E.notimplemented('wrf and aircraft binned NO2 are different sizes')
+                end
+                
+                if i_prof == 1
+                    all_wrf_no2_binned = nan(numel(wrf_no2_binned), n_profs);
+                    all_air_no2_binned = nan(numel(air_no2_binned), n_profs);
+                end
+                
+                all_wrf_no2_binned(:, i_prof) = wrf_no2_binned(:);
+                all_air_no2_binned(:, i_prof) = air_no2_binned(:);
+            end
+            
+            % Now, finally, calculate the correlation for each level
+            n_levels = size(all_wrf_no2_binned,1);
+            r2_vals = nan(n_levels, 1);
+            num_pts = nan(n_levels, 1);
+            warning('off', 'fitting:nans_removed')
+            for i_level = 1:n_levels
+                [~,~,~,line_data] = calc_fit_line(all_air_no2_binned(i_level, :), all_wrf_no2_binned(i_level, :), 'regression', reg_type);
+                r2_vals(i_level) = line_data.R2;
+                num_pts(i_level) = line_data.num_pts;
+            end
+            warning('on', 'fitting:nans_removed')
+        end
+        
+        function figs = plot_vcd_prof_ensembles(varargin)
+            p = advInputParser;
+            p.addParameter('extend_methods', {});
+            p.addParameter('prof_type', '');
+            p.addParameter('campaigns', {});
+            p.addParameter('title', true);
+            p.parse(varargin{:});
+            pout = p.Results;
+            
+            extend_methods = opt_ask_multiselect('Which extend method(s) to include?', misc_behr_v3_validation.profile_extend_methods, pout.extend_methods, '"extend_methods"');
+            prof_type = opt_ask_multichoice('Which a priori profile type to use?', {'monthly','daily'}, pout.prof_type, '"prof_type"', 'list', true, 'default', 'monthly');
+            
+            % We need to load at least one comparison structure to figure
+            % out which campaigns are available
+            comp_structs = make_empty_struct_from_cell(extend_methods);
+            for i_extend = 1:numel(extend_methods)
+                comp_structs.(extend_methods{i_extend}) = load(misc_behr_v3_validation.profile_comp_file(extend_methods{i_extend})); %#ok<LOAD>
+            end
+            
+            available_campaigns = misc_behr_v3_validation.list_available_campaigns(comp_structs.(extend_methods{1}), prof_type);
+            campaigns = opt_ask_multiselect('Which campaign(s) to include?', available_campaigns, pout.campaigns, '"campaigns"');
+            
+            include_title = pout.title;
+            
+            prof_fn = sprintf('us_%s', prof_type);
+            figs = gobjects(size(campaigns));
+            extend_plot_fmts = struct('wrf', struct('linecolor', 'r', 'envcolor', [1 0.5 0], 'legend_str', 'WRF-Chem'),...
+                'geos', struct('linecolor', 'b', 'envcolor', 'c', 'legend_str', 'GEOS-Chem'),...
+                'extrap', struct('linecolor', [0 0.5 0], 'envcolor', 'g', 'legend_str', 'Extrapolation'));
+            
+            for i_cam = 1:numel(campaigns)
+                this_campaign = campaigns{i_cam};
+                figs(i_cam) = figure;
+                
+                l = gobjects(numel(extend_methods),1);
+                legend_str = cell(1,numel(extend_methods));
+                for i_extend = 1:numel(extend_methods)
+                    this_extend = extend_methods{i_extend};
+                    plot_fmt = extend_plot_fmts.(this_extend);
+                    prof_color = plot_fmt.linecolor;
+                    env_color = plot_fmt.envcolor;
+                    details_struct = comp_structs.(this_extend).v3.(prof_fn).(this_campaign).t1200_1500.details;
+                    prof_ens = cat(1, details_struct.binned_profile)'*1e9;
+                    % These should be all at the same level, but this will
+                    % inherently deal with empty pres values
+                    prof_pres = nanmean(cat(1, details_struct.binned_pressure)',2);
+                    
+                    [prof_mean, ~, ~, l(i_extend)] = plot_profile_envelope(prof_ens, prof_pres, 'quantile', [0.1 0.9], 'linecolor', prof_color, 'envcolor', env_color, 'envalpha', 0.5);
+                    legend_str{i_extend} = plot_fmt.legend_str;
+                    was_app_mat = cat(1, details_struct.is_appended_or_interpolated)';
+                    xx_appended = sum(was_app_mat == 1,2)/size(was_app_mat, 2) > 0.5;
+                    prof_mean(~xx_appended) = nan;
+                    line(prof_mean, prof_pres, 'color', prof_color, 'linestyle', 'none', 'marker', 'o', 'linewidth', 1);
+                    %legend_str{by_2_ind+1} = sprintf('%s (extension)', this_extend);
+                end
+                legend(l, legend_str);
+                xlabel('[NO_2] (ppbv)');
+                ylabel('Pressure (hPa)');
+                set(gca,'ydir','reverse','fontsize',16);
+                xlim(max(get(gca,'xlim'),0));
+                ylim([0 1050]);
+                if include_title
+                    title(this_campaign);
+                end
+            end
+        end
+        
+        function plot_campaign_boxplots(varargin)
+            p = advInputParser;
+            p.addParameter('campaigns', {});
+            p.addParameter('extend_method', '');
+            
+            p.parse(varargin{:});
+            pout = p.Results;
+            
+            aircraft = load(misc_behr_v3_validation.profile_comp_file(pout.extend_method));
+            pandora = load(misc_behr_v3_validation.pandora_comp_file);
+            
+            campaigns = opt_ask_multiselect('Which campaigns?', fieldnames(pandora.v3.us_monthly), pout.campaigns, '"campaigns"');
+            all_versions = {'v2','v3'};
+            
+            air_labels = {'Air SP %s','SP %s-air', 'Air BEHR %s', 'BEHR %s-air'};
+            daily_labels = {'Air BEHR %s (D)', 'BEHR %s (D)-air'};
+            pandora_labels = {'Pandora-%s', 'SP %s-Pan', 'BEHR %s-Pan'};
+            daily_pan_labels = {'BEHR %s (D)-Pan'};
+            for i_cam = 1:numel(campaigns)
+                this_campaign = campaigns{i_cam};
+                for i_vers = 1:numel(all_versions)
+                    version = all_versions{i_vers};
+                    this_air = aircraft.(version).us_monthly.(this_campaign).t1200_1500;
+                    data = {this_air.air_no2_nasa, this_air.sp_no2, this_air.air_no2_behr, this_air.behr_no2};
+                    labels = air_labels;
+                    
+                    is_daily = isfield(aircraft.(version), 'us_daily') && ~isempty(aircraft.(version).us_daily.(this_campaign).t1200_1500);
+                    if is_daily
+                        this_daily_air = aircraft.(version).us_daily.(this_campaign).t1200_1500;
+                        data = veccat(data, {this_daily_air.air_no2_behr, this_daily_air.behr_no2});
+                        labels = veccat(labels, daily_labels);
+                    end
+                    
+                    this_pan = pandora.(version).us_monthly.(this_campaign).t1230_1430;
+                    data = veccat(data, {this_pan.pandora_no2,  this_pan.sp_no2, this_pan.behr_no2});
+                    labels = veccat(labels, pandora_labels);
+                    if is_daily
+                        this_daily_pan = pandora.(version).us_daily.(this_campaign).t1230_1430;
+                        data = veccat(data, {this_daily_pan.behr_no2});
+                        labels = veccat(labels, daily_pan_labels);
+                    end
+                    
+                    labels = cprintf(labels, version);
+                    misc_behr_v3_validation.boxplot_helper(data, labels);
+                    title(upper(strrep(this_campaign, '_', '-')));
+                end
+            end
+        end
+        
+        function fig = boxplot_helper(x_data, labels)
+            xall = [];
+            gall = [];
+            for i_dat = 1:numel(x_data)
+                x = x_data{i_dat}(:);
+                xall = cat(1, xall, x);
+                gall = cat(1, gall, i_dat * ones(size(x)));
+            end
+            
+            fig = figure;
+            boxplot(xall,gall,'labels',labels);
+            ylabel('VCD (molec cm^{-2})');
+            set(gca,'ygrid','on','fontsize',14,'XTickLabelRotation',30)
+        end
+        
+        
+        function [unwt_table, wt_table] = are_avg_slopes_different(varargin)
+            E = JLLErrors;
+            
+            p = advInputParser;
+            p.addParameter('avg_or_combo', '');
+            p.KeepUnmatched = true;
+            p.parse(varargin{:});
+            pout = p.Results;
+            
+            avg_or_combo = opt_ask_multichoice('Use the average or combined aircraft and Pandora slopes?', {'avg', 'combo'}, pout.avg_or_combo, '"avg_or_combo"', 'list', true);
+            
+            switch lower(avg_or_combo)
+                case 'avg'
+                    [slopes_and_stds, ~, rownames, samples] = misc_behr_v3_validation.make_aircraft_pandora_avg(varargin{:}, 'plot_or_table', 'table', 'return_as_table', false);
+                case 'combo'
+                    [slopes_and_stds, ~, rownames, samples] = misc_behr_v3_validation.make_aircraft_pandora_combo(varargin{:}, 'return_as_table', false);
+                otherwise
+                    E.notimplemented('No action for case = %s', avg_or_combo);
+            end
+            slopes = slopes_and_stds(:, 1:2:end);
+            stddevs = slopes_and_stds(:,2:2:end);
+            
+            comp_mat = build_comp_mat(rownames);
+            labels = cell(size(rownames,1), 1);
+            for i=1:numel(labels)
+                labels{i} = strjoin(rownames(i,:), ' ');
+                labels{i} = regexprep(capitalize_words(labels{i}), '\W', '');
+            end
+            
+            unwt_table = misc_behr_v3_validation.display_slope_sig_diff(slopes(:,1), stddevs(:,1), samples(:,1), 'labels', labels, 'do_comp', comp_mat);
+            wt_table = misc_behr_v3_validation.display_slope_sig_diff(slopes(:,2), stddevs(:,2), samples(:,2), 'labels', labels, 'do_comp', comp_mat);
+            
+            function mat = build_comp_mat(rows)
+                % We want to compare three/five pairs within each campaign:
+                % SP v3.0 <-> BEHR v3.0 (M/D), BEHR v2.1C <-> BEHR v3.0
+                % (M/D), and BEHR v3.0 (M) <-> BEHR v3.0 (D)
+                mat = false(size(rows,1));
+                pairs = {'SP v3\.0', 'BEHR v3\.0. \(M\)';...
+                    'SP v3\.0', 'BEHR v3\.0. \(D\)';...
+                    'BEHR v2\.1.', 'BEHR v3\.0. \(M\)';...
+                    'BEHR v2\.1.', 'BEHR v3\.0. \(D\)';...
+                    'BEHR v3\.0. \(M\)', 'BEHR v3\.0. \(D\)'};
+                u_cams = unique(rows(:,1));
+                for i_cam = 1:numel(u_cams)
+                    for i_pair = 1:size(pairs,1)
+                        [pair_i, pair_j] = find_pair_inds(rows, u_cams{i_cam}, pairs{i_pair, 1}, pairs{i_pair, 2});
+                        if ~isempty(pair_i) && ~isempty(pair_j)
+                            mat(pair_i, pair_j) = true;
+                        end
+                    end
+                end
+            end
+            
+            function [i,j] = find_pair_inds(rows, campaign, first_name, second_name)
+                xx_cam = strcmp(rows(:,1), campaign);
+                xx_1 = regcmp(rows(:,2), first_name);
+                xx_2 = regcmp(rows(:,2), second_name);
+                i = find(xx_cam & xx_1);
+                j = find(xx_cam & xx_2);
+                
+                if numel(i) > 1 || numel(j) > 1
+                    E.callError('pair_matching:multiple_found', 'More than one match found for a pair of products');
+                end
+            end
+        end
+        
+        function out = display_slope_sig_diff(slopes, std_devs, n_pts, varargin)
+            % Given a list 
+            
+            p = advInputParser;
+            p.addParameter('do_comp', []);
+            p.addParameter('labels', {});
+            p.addParameter('out_format', 'table');
+            p.parse(varargin{:});
+            pout = p.Results;
+            
+            do_comp_matrix = pout.do_comp;
+            labels = pout.labels;
+            out_format = pout.out_format;
+            
+            if isempty(do_comp_matrix)
+                do_comp_matrix = true(numel(slopes));
+            end
+            if isempty(labels)
+                labels = num2cell(1:numel(slopes));
+                labels = cellfun(@num2str, labels, 'uniformoutput', false);
+            end
+            
+            allowed_out_fmts = {'table', 'array', 'plot'};
+            if ~ismember(out_format, allowed_out_fmts)
+                E.badinput('"out_format" can only be one of: %s', strjoin(allowed_out_fmts, ', '));
+            end
+            
+            is_diff = nan(numel(slopes));
+            
+            for i=1:numel(slopes)
+                for j=i+1:numel(slopes)
+                    if do_comp_matrix(i,j) || do_comp_matrix(j,i)
+                        is_diff(i,j) = slope_significant_difference( slopes(i), std_devs(i), n_pts(i), slopes(j), std_devs(j), n_pts(j));
+                    end
+                end
+            end
+            
+            switch lower(out_format)
+                case 'table'
+                    str_cell = cell(size(is_diff));
+                    for i_cell = 1:numel(is_diff)
+                        if is_diff(i_cell) == 0
+                            str_cell{i_cell} = 'n';
+                        elseif is_diff(i_cell) == 1
+                            str_cell{i_cell} = 'y';
+                        end
+                    end
+                    out = cell2table(str_cell, 'RowNames', labels, 'VariableNames', labels);
+                case 'array'
+                    out = is_diff;
+                case 'plot'
+                    E.notimplemented('plotting')
+                otherwise
+                    E.notimplemented(out_format)
+            end
         end
         %%%%%%%%%%%%%%%%%%%%%%
         % Analysis functions %
         %%%%%%%%%%%%%%%%%%%%%%
         
         function results = record_scd_comparison()
-            nsites = 20;
-            ndays = 20;
+            nsites = 10;
+            ndays = 5;
             dvec = datenum('2012-01-01'):datenum('2012-12-31');
             locs = misc_behr_v3_validation.read_locs_file;
-            % Remove the rural sites
-            locs = locs(1:70);
+            
+            allowed_site_types = {'Cities', 'PowerPlants'};
+            %site_types = ask_multiselect('Which site types to use?', allowed_site_types);
+            
+            % Remove the undesired site types
+            %xx = ismember({locs.SiteType}, site_types);
+            %locs = locs(xx);
+            xx = ismember({locs.ShortName}, {'Atlanta','Chicago','Las Vegas','Los Angeles','New York','Four Corners'});
+            %xx = ismember({locs.ShortName}, {'Four Corners'});
+            locs = locs(xx);
+            
+            nsites = min(nsites, numel(locs));
             
             results = struct('loc_name', '', 'date', '', 'user_value', [], 'user_confidence', [], 'user_note', '');
             results = repmat(results, nsites*ndays, 1);
@@ -2333,7 +3561,7 @@ classdef misc_behr_v3_validation
                 locs(isite) = [];
                 
             end
-
+            
             misc_behr_v3_validation.save_scd_results(misc_behr_v3_validation.scd_comp_file, results, eval_opts(1:end-1));
         end
         
@@ -2385,12 +3613,14 @@ classdef misc_behr_v3_validation
                 for b=1:numel(dvec)
                     % Load the gridded BEHR data so that we can average
                     % over multiple orbits, if present
-                    [behr_daily, wrf_monthly, wrf_daily] = misc_behr_v3_validation.load_wrf_and_behr_data(locations(a), dvec(b), true);
+                    [behr_daily, wrf_monthly, wrf_daily] = misc_behr_v3_validation.load_wrf_and_behr_data(locations(a), dvec(b), 'load_gridded', true);
                     
                 end
             end
             
         end
+        
+        
         
         function [is_significant, t] = calculate_slope_significant_difference(varargin)
             p = inputParser;
@@ -2398,19 +3628,29 @@ classdef misc_behr_v3_validation
             p.addParameter('slope2_args', {});
             p.addParameter('match_pandora_aircraft', nan);
             p.addParameter('remove_outliers', nan);
+            p.addParameter('combine_air_pan', nan);
+            p.addParameter('plot', true);
             
             p.parse(varargin{:});
             pout = p.Results;
             
             slope1_args = pout.slope1_args;
             slope2_args = pout.slope2_args;
-            match_pandora_aircraft = pout.match_pandora_aircraft;
             remove_outliers = pout.remove_outliers;
+            do_plot = pout.plot;
+            do_combine_aircraft_pandora = opt_ask_yn('Combine aircraft and Pandora observations?', pout.combine_air_pan, '"combine_air_pan"');
+            if do_combine_aircraft_pandora
+                match_pandora_aircraft = opt_ask_yn('Subset the data so that only sites/times with Pandora and aircraft data are used?', pout.match_pandora_aircraft, 'match_pandora_aircraft');
+                load_fxn = @misc_behr_v3_validation.load_comparison_data;
+            else
+                load_fxn = @misc_behr_v3_validation.load_combined_aircraft_pandora;
+            end
+            
             
             fprintf('Loading data for slope 1...\n');
-            [data_structs_1, opts1] = misc_behr_v3_validation.load_comparison_data(slope1_args{:});
+            [data_structs_1, opts1] = load_fxn(slope1_args{:}, 'match', match_pandora_aircraft);
             fprintf('Loading data for slope 2...\n');
-            [data_structs_2, opts2] = misc_behr_v3_validation.load_comparison_data(slope2_args{:});
+            [data_structs_2, opts2] = load_fxn(slope2_args{:},  'match', match_pandora_aircraft);
             
             if numel(data_structs_1) > 1 || numel(data_structs_2) > 1
                 E.notimplemented('comparing multiple slopes at once');
@@ -2420,7 +3660,7 @@ classdef misc_behr_v3_validation
             data2 = data_structs_2{1};
             
             data_types = {opts1.data_source, opts2.data_source};
-            if all(ismember({'pandora', 'aircraft'}, data_types))
+            if ~do_combine_aircraft_pandora && all(ismember({'pandora', 'aircraft'}, data_types))
                 % If we have both a pandora and aircraft measurement, offer
                 % the option to match them
                 if opt_ask_yn('Subset the data so that only sites/times with Pandora and aircraft data are used?', match_pandora_aircraft, 'match_pandora_aircraft')
@@ -2433,21 +3673,41 @@ classdef misc_behr_v3_validation
             end
             
             if opt_ask_yn('Remove outliers?', remove_outliers, 'remove_outliers')
-                not_out1 = ~isoutlier(data1.x) & ~isoutlier(data1.y);
-                not_out2 = ~isoutlier(data2.x) & ~isoutlier(data2.y);
+                not_out1 = misc_behr_v3_validation.is_not_outlier(data1.x, data1.y);
+                not_out2 = misc_behr_v3_validation.is_not_outlier(data2.x, data2.y);
             else
                 not_out1 = true(size(data1.x));
                 not_out2 = true(size(data2.x));
             end
             
-            [~,~,~,fit1_info] = calc_fit_line(data1.x(not_out1), data1.y(not_out1), 'regression', 'rma');
-            [~,~,~,fit2_info] = calc_fit_line(data2.x(not_out2), data2.y(not_out2), 'regression', 'rma');
+            [line1x,line1y,line1_legstr,fit1_info] = calc_fit_line(data1.x(not_out1), data1.y(not_out1), 'regression', 'rma', 'xcoord', [-1e17 1e17]);
+            [line2x,line2y,line2_legstr,fit2_info] = calc_fit_line(data2.x(not_out2), data2.y(not_out2), 'regression', 'rma', 'xcoord', [-1e17 1e17]);
+            
+            if do_plot
+                figure;
+                line(data1.x(not_out1), data1.y(not_out1), 'color', 'b', 'marker', 's', 'linestyle', 'none');
+                l(1) = line(line1x, line1y, 'color', 'b');
+                line(data2.x(not_out2), data2.y(not_out2), 'color', 'r', 'marker', 'x', 'linestyle', 'none');
+                l(2) = line(line2x, line2y, 'color', 'r');
+                legend(l', {line1_legstr, line2_legstr});
+            end
             
             [is_significant, t] = slope_significant_difference( fit1_info.P, fit1_info.StdDevM, numel(data1.x), fit2_info.P, fit2_info.StdDevM, numel(data2.x) );
         end
+        
+        
     end
     
     methods(Static = true, Access = private)
+        function leg_strings = versions2legend(versions)
+            % Convert a cell array of version names into a cell array of
+            % legend-formatted names
+            leg_strings = cell(size(versions));
+            for i=1:numel(versions)
+                leg_strings{i} = misc_behr_v3_validation.plot_wrf_prof_legend_names.(versions{i});
+            end
+        end
+        
         function scd_subgroup(h5_filename, group_name, results)
             E = JLLErrors;
             % Make sure group name does NOT end in a slash to avoid double
@@ -2506,17 +3766,29 @@ classdef misc_behr_v3_validation
                 struct_type = 'pandora';
                 plot_vars = {'pandora_no2', 'sp_no2', 'behr_no2'};
                 labels = struct('pandora_no2', 'Pandora NO_2 VCD (molec. cm^{-2})',...
-                'sp_no2', 'NASA NO_2 VCD (molec. cm^{-2})',...
-                'behr_no2', 'BEHR NO_2 VCD (molec. cm^{-2})');
+                    'sp_no2', 'NASA NO_2 VCD (molec. cm^{-2})',...
+                    'behr_no2', 'BEHR NO_2 VCD (molec. cm^{-2})');
             else
                 struct_type = 'aircraft';
                 plot_vars = {'air_no2_nasa', 'air_no2_behr', 'sp_no2', 'behr_no2'};
                 labels = struct('air_no2_nasa', 'Aircraft NO_2 VCD (molec. cm^{-2})',...
-                'air_no2_behr', 'Aircraft NO_2 VCD (molec. cm^{-2})',...
-                'sp_no2', 'NASA NO_2 VCD (molec. cm^{-2})',...
-                'behr_no2', 'BEHR NO_2 VCD (molec. cm^{-2})');
+                    'air_no2_behr', 'Aircraft NO_2 VCD (molec. cm^{-2})',...
+                    'sp_no2', 'NASA NO_2 VCD (molec. cm^{-2})',...
+                    'behr_no2', 'BEHR NO_2 VCD (molec. cm^{-2})');
             end
         end
+        
+        function campaigns = list_available_campaigns(comp_struct, prof_mode)
+            prof_fn = sprintf('us_%s', prof_mode);
+            substruct = comp_struct.v3.(prof_fn);
+            campaigns = fieldnames(substruct);
+            keep_campaigns = true(size(campaigns));
+            for i_cam = 1:numel(campaigns)
+                keep_campaigns(i_cam) = ~isempty(substruct.(campaigns{i_cam}).t1200_1500);
+            end
+            campaigns = campaigns(keep_campaigns);
+        end
     end
+    
     
 end

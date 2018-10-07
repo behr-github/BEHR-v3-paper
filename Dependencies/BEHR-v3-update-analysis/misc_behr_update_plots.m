@@ -326,30 +326,98 @@ classdef misc_behr_update_plots
         function compare_bc_amfs()
             % Assume that the files available are the same in both
             % directories
-            files = dir(fullfile(misc_behr_update_plots.bc_test_root, 'MozBCs'));
-            test_file = ask_multichoice('Choose file to compare', {files.name}, 'list', true);
+            files = dir(fullfile(misc_behr_update_plots.bc_test_root, 'MozBCs', '*.mat'));
+            action = ask_multichoice('Which plot?', {'Individual','Hist'}, 'list', true);
             filter_clouds = ask_yn('Filter out cld. frac. > 0.2?');
-            moz = load(fullfile(misc_behr_update_plots.bc_test_root, 'MozBCs', test_file), 'Data');
-            geos = load(fullfile(misc_behr_update_plots.bc_test_root, 'GeosBCs', test_file), 'Data');
             
-            file_date = datenum(regexp(test_file, '\d\d\d\d\d\d\d\d', 'match', 'once'), 'yyyymmdd');
-            file_date = datestr(file_date);
-            for a=1:numel(moz.Data)
-                lon = moz.Data(a).Longitude;
-                lat = moz.Data(a).Latitude;
-                rdel = reldiff(moz.Data(a).BEHRAMFTrop, geos.Data(a).BEHRAMFTrop)*100;
-                % Clouds should be the same in both, they are not affected
-                % by the NO2 profile
-                if filter_clouds
-                    high_clds = moz.Data(a).CloudFraction > 0.2;
-                    rdel(high_clds) = nan;
+            diff_field = ask_multichoice('Which field to compare',{'BEHRColumnAmountNO2Trop','BEHRAMFTrop'},'list',true);
+            diff_type = ask_multichoice('Type of difference', {'Relative', 'Absolute'}, 'list', true);
+            if strcmpi(diff_type, 'relative')
+                rel_label_str = sprintf('%%\\Delta %s', diff_field);
+                diff_fxn = @(A,B) reldiff(A,B)*100;
+                hist_cutoff = 10;
+            elseif strcmpi(diff_type, 'absolute')
+                rel_label_str = sprintf('\\Delta %s', diff_field);
+                diff_fxn = @(A,B) A - B;
+                if strcmp(diff_field, 'BEHRColumnAmountNO2Trop')
+                    hist_cutoff = 1e15;
+                else
+                    hist_cutoff = 0.2;
                 end
-                figure;
-                pcolor(lon, lat, rdel);
-                shading flat;
-                colorbar;
-                state_outlines('k','not','ak','hi');
-                title(sprintf('%s - Orbit %d', file_date, a));
+            end
+            
+            
+            if filter_clouds
+                cld_crit = 0.2;
+            else
+                cld_crit = 1.0;
+            end
+            
+            reject_details = struct('cloud_type','omi','cloud_frac',cld_crit,'row_anom_mode','XTrackFlags','check_behr_amf',true);
+            
+            
+            if strcmpi(action,'individual')
+                plot_individual_orbits
+            elseif strcmpi(action,'hist')
+                plot_hist
+            end
+            
+            
+            
+            function plot_individual_orbits()
+                test_files = ask_multiselect('Choose file to compare', {files.name});
+                
+                for i_file = 1:numel(test_files)
+                    moz = load(fullfile(misc_behr_update_plots.bc_test_root, 'MozBCs', test_files{i_file}), 'Data');
+                    geos = load(fullfile(misc_behr_update_plots.bc_test_root, 'GeosBCs', test_files{i_file}), 'Data');
+                    
+                    file_date = datenum(regexp(test_files{i_file}, '\d\d\d\d\d\d\d\d', 'match', 'once'), 'yyyymmdd');
+                    file_date = datestr(file_date);
+                    for a=1:numel(moz.Data)
+                        lon = moz.Data(a).Longitude;
+                        lat = moz.Data(a).Latitude;
+                        val_del = diff_fxn(moz.Data(a).(diff_field), geos.Data(a).(diff_field));
+
+                        % Clouds should be the same in both, they are not affected
+                        % by the NO2 profile
+                        bad_pix = omi_pixel_reject(moz.Data(a), 'detailed', reject_details, 'return_mode', 'logical');
+                        val_del(bad_pix) = nan;
+                        
+                        figure;
+                        pcolor(lon, lat, val_del);
+                        shading flat;
+                        cb = colorbar;
+                        cb.Label.String = rel_label_str;
+                        state_outlines('k','not','ak','hi');
+                        title(sprintf('%s - Orbit %d', file_date, a));
+                    end
+                end
+            end
+            
+            function plot_hist
+                test_files = ask_multiselect('Choose file to compare', {files.name});
+                for i_file = 1:numel(test_files)
+                    moz = load(fullfile(misc_behr_update_plots.bc_test_root, 'MozBCs', test_files{i_file}), 'Data');
+                    geos = load(fullfile(misc_behr_update_plots.bc_test_root, 'GeosBCs', test_files{i_file}), 'Data');
+                    moz = load(fullfile(misc_behr_update_plots.bc_test_root, 'MozBCs', test_files{i_file}), 'Data');
+                    geos = load(fullfile(misc_behr_update_plots.bc_test_root, 'GeosBCs', test_files{i_file}), 'Data');
+                    
+                    rdel_total = [];
+                    for a=1:numel(moz.Data)
+                        val_del = diff_fxn(moz.Data(a).(diff_field), geos.Data(a).(diff_field));
+                        % Clouds should be the same in both, they are not affected
+                        % by the NO2 profile
+                        bad_pix = omi_pixel_reject(moz.Data(a), 'detailed', reject_details, 'return_mode', 'logical');
+                        val_del(bad_pix) = [];
+                        rdel_total = veccat(rdel_total, val_del, 'column');
+                    end
+                end
+                
+                figure; 
+                histstats(rdel_total, 50);
+                xlabel(rel_label_str);
+                
+                fprintf('%f%% of pixels had a change > %g\n', sum(abs(rdel_total) > hist_cutoff) / numel(rdel_total) * 100, hist_cutoff);
             end
         end
         
@@ -728,6 +796,21 @@ classdef misc_behr_update_plots
             compare_old_new_profiles(date_in, new_wrf_prof, old_wrf_prof, daily_or_monthly, utc_hour);
         end
         
+        function fig = ocean_lut_comparison
+            old_szas = [5 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85 89];
+            old_albs = [0.038 0.038 0.039 0.039 0.040 0.042 0.044 0.046 0.051 0.058 0.068 0.082 0.101 0.125 0.149 0.158 0.123 0.073];
+            v3A_szas = [0 5 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85];
+            v3A_albs = [0.059 0.0591 0.0593 0.06 0.0613 0.0629 0.0649 0.0674 0.0707 0.0748 0.0795 0.0847 0.0899 0.094 0.0951 0.092 0.0865 0.0826];
+            [~,refl_struct] = coart_sea_reflectance([]);
+            
+            fig = figure;
+            plot(old_szas, old_albs, 'ro-', v3A_szas, v3A_albs, 'b^-', refl_struct.sza, refl_struct.alb, 'kx-', 'linewidth', 2, 'markersize', 12);
+            legend('v2.1C','v3.0A','v3.0B','location','northwest');
+            ylim([0 0.2]);
+            xlabel('SZA (degrees)');
+            ylabel('Albedo (unitless)');
+            set(gca,'fontsize',16);
+        end
         
         function modis_avg_quality(start_date, end_date)
             % Averages the quality flags in the MODIS MCD43C1 data between
@@ -1209,18 +1292,66 @@ classdef misc_behr_update_plots
             fig.Children(2).Position(3) = 0.63;
         end
         
-        function [fig_s3, fig_rad_v_geo, fig_clear, fig_cloudy, fig_tot_v_vis] = plot_vis_scatter(plot_gui)
-            if ~exist('plot_gui', 'var')
-                plot_gui = true;
-            end
+        function [fig_s3, fig_rad_v_geo, fig_clear, fig_cloudy, fig_tot_v_vis] = plot_vis_scatter(varargin)
+            
+            p = advInputParser;
+            p.addParameter('plot_gui', true);
+            p.addParameter('apriori_mode', 'concentration');
+            p.parse(varargin{:});
+            pout = p.Results;
+            
+            plot_gui = pout.plot_gui;
+            apriori_mode = pout.apriori_mode;
             
             %vis_start_date = '2012-07-01';
             vis_start_date = '2012-06-01';
-            %vis_end_date = '2012-07-14';
+            %vis_end_date = '2012-07-02';
             vis_end_date = '2012-08-31';
-            fields = {'BEHRColumnAmountNO2TropVisOnly', 'BEHRColumnAmountNO2Trop','CloudRadianceFraction','CloudFraction','CloudPressure','BEHRNO2apriori','XTrackQualityFlags'};
-            [no2_vis_old, no2_tot_old, cld_rad_frac_old, cld_frac_old, cld_pres_old, apriori_old, xtrack_old, pixel_info_old] = cat_sat_data(fullfile(misc_behr_update_plots.behr_nasa_brdfD_dir, 'MonthlyProfs'), fields, 'startdate', vis_start_date, 'enddate', vis_end_date);
-            [no2_vis_new, no2_tot_new, ~, ~, ~, ~, xtrack_new] = cat_sat_data(fullfile(misc_behr_update_plots.behr_nasa_brdf_vis_dir, 'MonthlyProfs'), fields, 'startdate', vis_start_date, 'enddate', vis_end_date);
+            fields = {'BEHRColumnAmountNO2TropVisOnly', 'BEHRColumnAmountNO2Trop','CloudRadianceFraction','CloudFraction','CloudPressure','BEHRNO2apriori', 'BEHRPressureLevels', 'GLOBETerpres', 'XTrackQualityFlags'};%, 'SolarZenithAngle','ViewingZenithAngle','RelativeAzimuthAngle','TerrainReflectivity','TerrainPressure'};
+            [no2_vis_old, no2_tot_old, cld_rad_frac_old, cld_frac_old, cld_pres_old, apriori_old, pres_old, surf_pres_old, xtrack_old, pixel_info_old] = cat_sat_data(fullfile(misc_behr_update_plots.behr_nasa_brdfD_dir, 'MonthlyProfs'), fields, 'startdate', vis_start_date, 'enddate', vis_end_date);
+            [no2_vis_new, no2_tot_new, ~, ~, ~, ~, ~, ~, xtrack_new] = cat_sat_data(fullfile(misc_behr_update_plots.behr_nasa_brdf_vis_dir, 'MonthlyProfs'), fields, 'startdate', vis_start_date, 'enddate', vis_end_date);
+            
+            apriori_vcd_gnd = nan(size(no2_vis_old));
+            apriori_vcd_cld = nan(size(no2_vis_old));
+            
+            for i_pix = 1:numel(no2_vis_old)
+                notnans = ~isnan(pres_old(:,i_pix));
+                if sum(notnans) > 1
+                    try
+                        vcd_gnd = integPr2(apriori_old(notnans,i_pix), pres_old(notnans,i_pix), surf_pres_old(i_pix));
+                        vcd_cld = integPr2(apriori_old(notnans,i_pix), pres_old(notnans,i_pix), cld_pres_old(i_pix));
+                        apriori_vcd_gnd(i_pix) = vcd_gnd;
+                        apriori_vcd_cld(i_pix) = vcd_cld;
+                    catch err
+                        % If an error happens during integration, continue.
+                        % Hopefully not storing the values in the arrays
+                        % until both complete successfully will keep both
+                        % in sync.
+                        fprintf('Problem integrating pixel %d: %s\n', i_pix, err.message)
+                    end
+                end
+            end
+            
+            
+            if ~strcmpi(apriori_mode, 'concentration')
+                num_pix = numel(no2_vis_old);
+                apriori_sf = nan(size(apriori_old));
+                if strcmpi(apriori_mode, 'partial col')
+                    % If calculating partial columns then there will be one
+                    % less level because we need to integrate between each
+                    % level of the profile
+                    apriori_sf = apriori_sf(1:end-1,:,:);
+                end
+                for i_pix = 1:num_pix
+                    if mod(i_pix,1000) == 0
+                        fprintf('Calculating shape factor for pixel %d\n', i_pix);
+                    end
+                    if sum(~isnan(apriori_old(:,i_pix))) > 1
+                        apriori_sf(:,i_pix) = shape_factor(pres_old(:,i_pix), apriori_old(:,i_pix), 'mode', apriori_mode);
+                    end
+                end
+                apriori_old = apriori_sf;
+            end
             
             row_anom = xtrack_old > 0 | xtrack_new > 0;
             
@@ -1233,9 +1364,24 @@ classdef misc_behr_update_plots
             apriori_old(row_anom) = [];
             no2_vis_new(row_anom) = [];
             no2_tot_new(row_anom) = [];
+            surf_pres_old(row_anom) = [];
+            apriori_vcd_gnd(row_anom) = [];
+            apriori_vcd_cld(row_anom) = [];
             pixel_info_old(row_anom) = [];
             
             rdel = reldiff(no2_vis_new, no2_vis_old)*100;
+            
+            figure;
+            scatter(apriori_vcd_gnd - apriori_vcd_cld, rdel);
+            xlabel('To ground - above cloud model VCD');
+            ylabel('%\Delta NO_2 VCD');
+            set(gca,'fontsize',16);
+            
+            figure;
+            scatter(apriori_vcd_gnd ./ apriori_vcd_cld, rdel);
+            xlabel('To ground / above cloud model VCD');
+            ylabel('%\Delta NO_2 VCD');
+            set(gca,'fontsize',16);
             
             %{
             figure;
@@ -1348,6 +1494,110 @@ classdef misc_behr_update_plots
             xlabel('Cloud fraction');
             ylabel('Cloud pressure');
             set(gca,'fontsize',16);
+        end
+        
+        function plot_theoretical_vis_difference()
+            % The two visible-only AMF formulations are:
+            %
+            %   A_old = (1-f_r) SCD_clr / VCD_clr + f_r SCD_cld / VCD_cld
+            %
+            %   A_new = (1-f_r) SCD_clr + f_r SCD_cld
+            %           -----------------------------
+            %           (1-f_g) VCD_clr + f_g VCD_clr
+            %
+            % Mathematically, setting f_g = f_r doesn't cause these two to
+            % become equivalent, so let's test how the relative difference
+            % between the two varies with the difference between CRF and
+            % CF.
+            %
+            % To get values for the SCD and VCDs, I ran the vis-increment
+            % BEHR code for 2012-07-01 and took the values from the second
+            % US orbit. 
+            %
+            %   * Cloud SCD / cloud VCD is pretty consistently a 2.5:1
+            %   ratio, with the SCDs typically between 0 and 1.5e16
+            %   molec/cm^2
+            %   * The clear SCD / clear VCD has two main lobes on the
+            %   scatter plot, one about 2:1 and the other roughly 1:1 or
+            %   0.75:1. The SCDs are mostly < 1e16 on the 2:1 and < 7.5e15
+            %   on the other line, but go up to a max of 3.6e16 and 2.6e16
+            %   respectively.
+            %   * The cloudy VCD/clear VCD ratio is pretty evenly spread
+            %   out in a triangle below the 1:1 line (which makes sense).
+            %   The max is around 1e16.
+            %   * The cloudy SCD/clear SCD ratio has a similar shape to the
+            %   VCD one, but is below the 3:1 line instead. The max cloudy
+            %   SCD is 15e15 for a clear SCD of 5e15 to 8.5e15.
+            %
+            %   Median clear VCD is 2.3e15 with corresponding clear SCD of
+            %   1.9e15, cloudy VCD of 3e14, and cloudy SCD of 8e14.
+            %
+            %   Alternate idea: get some representative profiles and
+            %   compute the AMFs the two different ways. For the polluted
+            %   profile I looked for a pixel in the same orbit as above
+            %   with the smallest clear AMF > 0.3. For clean, I looked for
+            %   a clear AMF ~1.5.
+            
+            vcd_clear = 2.3e15;
+            scd_clear = 1.9e15;
+            vcd_cloudy = 3e14;
+            scd_cloudy = 8e14;
+            
+            [cld_rad_frac, cld_frac] = meshgrid(0:0.01:1, 0:0.01:1);
+            
+            figure;
+            plot_amf_diff(vcd_clear, scd_clear, vcd_cloudy, scd_cloudy, cld_rad_frac, cld_frac);
+            
+            
+            function plot_amf_diff(vcd_clr, scd_clr, vcd_cld, scd_cld, crf, cf)
+                old_amf = amf_old(vcd_clr, scd_clr, vcd_cld, scd_cld, crf);
+                new_amf = amf_new(vcd_clr, scd_clr, vcd_cld, scd_cld, crf, cf);
+                % the relative difference between the final VCDs would be:
+                %       
+                %   (V2 - V1)   (S/A2) - (S/A1)        
+                %   --------- = --------------- = A1 * [1/A2 - 1/A1)
+                %      V1             S/A1
+                %
+                %                               = A1/A2 - 1
+                perdel = (old_amf ./ new_amf - 1)*100;
+                contourf(crf,cf,perdel);
+                colormap blue_red_cmap
+                cb=colorbar;
+                cb.Label.String = 'Predicted %\Delta NO_2';
+                caxis(calc_plot_limits(perdel(:), 'diff'))
+                xlabel('Cloud radiance fraction')
+                ylabel('Cloud fraction');
+            end
+            
+            function amf = amf_old(vcd_clr, scd_clr, vcd_cld, scd_cld, crf)
+                amf = (1-crf) .* scd_clr ./ vcd_clr + crf .* scd_cld ./ vcd_cld;
+            end
+            
+            function amf = amf_new(vcd_clr, scd_clr, vcd_cld, scd_cld, crf, cf)
+                scd = (1-crf) .* scd_clr + crf .* scd_cld;
+                vcd = (1-cf) .* vcd_clr + cf .* vcd_cld;
+                amf = scd ./ vcd;
+            end
+            
+%             Profiles.polluted.no2 = [1.56e-08;1.46e-08;1.37e-08;1.28e-08;1.18e-08;9.95e-09;8.07e-09;6.06e-09;3.82e-09;1.18e-09;2.6e-10;1.72e-10;1.5e-10;1.21e-10;1.01e-10;8e-11;6.27e-11;5.34e-11;4.48e-11;3.99e-11;3.39e-11;2.77e-11;2.42e-11;2.86e-11;3.45e-11;5.16e-11;5.68e-11;1.56e-10];
+%             Profiles.polluted.sw_clr = [0.247;0.261;0.275;0.289;0.303;0.332;0.361;0.39;0.421;0.466;0.527;0.606;0.681;0.758;0.838;0.92;1.01;1.1;1.22;1.33;1.47;1.6;1.75;1.87;1.97;2.07;2.19;2.3];
+%             Profiles.polluted.sw_cld = [3.19;3.19;3.18;3.18;3.18;3.17;3.17;3.17;3.16;3.15;3.14;3.13;3.12;3.11;3.09;3.08;3.06;3.04;3.02;2.99;2.96;2.93;2.89;2.85;2.81;2.77;2.7;2.62];
+%             Profiles.polluted.alpha = [0.717;0.718;0.72;0.721;0.722;0.725;0.727;0.73;0.732;0.736;0.741;0.748;0.755;0.762;0.769;0.776;0.786;0.795;0.808;0.819;0.834;0.849;0.87;0.887;0.907;0.928;0.959;0.987];
+%             
+%             Profiles.clean.no2 = [7.9e-10;7.72e-10;7.54e-10;7.36e-10;7.18e-10;6.82e-10;6.46e-10;6.1e-10;5.74e-10;5.2e-10;4.49e-10;3.9e-10;3.58e-10;2.9e-10;2.35e-10;1.74e-10;1.25e-10;8.07e-11;4.18e-11;2.47e-11;2.76e-11;4.46e-11;3.92e-11;1.5e-10;2.73e-10;4.33e-10;2.82e-10;4.73e-10];
+%             Profiles.clean.sw_clr = [0.188;0.2;0.212;0.225;0.239;0.265;0.291;0.319;0.346;0.388;0.445;0.517;0.6;0.686;0.774;0.865;0.961;1.06;1.2;1.32;1.48;1.63;1.79;1.92;2.04;2.14;2.28;2.39];
+%             Profiles.clean.sw_cld = [3.34;3.34;3.34;3.33;3.33;3.33;3.32;3.32;3.31;3.3;3.29;3.28;3.26;3.25;3.23;3.22;3.2;3.17;3.15;3.12;3.08;3.04;3;2.96;2.91;2.87;2.8;2.72];
+%             Profiles.clean.alpha = [0.76;0.761;0.762;0.763;0.764;0.766;0.768;0.77;0.772;0.775;0.779;0.784;0.789;0.795;0.8;0.806;0.812;0.819;0.829;0.838;0.85;0.863;0.88;0.897;0.915;0.937;0.97;0.99];
+%             
+%             pressure = [1020;1015;1010;1005;1000;990;980;970;960;945;925;900;875;850;825;800;770;740;700;660;610;560;500;450;400;350;280;200];
+%             
+%             scenarios = fieldnames(Profiles);
+%             for i_scenario = 1:numel(scenarios)
+%                 Scenario = Profiles.(scenarios{i_scenario});
+%                 % The clear sky VCD/SCD do not depend on the cloud pressure
+%                 % so we only have to compute them once. We're just going to
+%                 % set the surface pressure to sea level 
+%             end
         end
         
         function [fig_rel, fig_abs] = plot_bsa_to_brdf_indiv_pixel_changes(regenerate_from_behr_files)
@@ -2050,6 +2300,7 @@ classdef misc_behr_update_plots
                 end
             end
         end
+
     end
     
     
