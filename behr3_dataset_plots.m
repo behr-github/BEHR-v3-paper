@@ -31,27 +31,31 @@ else
 end
 
 
-insert_change_stats_table('average', main_tex_file, 'INCR-TABLE');
+
 
 temperature_error_effect();
-incr_no2_changes(no2vcd_jja, no2visvcd_jja, 'MonthlyIncrDiffs', 'map');
-incr_no2_changes(no2visvcd_jja, no2visvcd_jja, fullfile('Supplement','MonthlyVisIncrDiffs'), 'map');
-incr_no2_changes(no2vcd_d_jja, no2visvcd_d_jja, 'DailyIncrDiffs', 'map', 4:9);
+vis_formula_change()
+monthly_incr_inds = 1:8;
+daily_incr_inds = 3:8;
+incr_no2_changes(no2vcd_jja, 'MonthlyIncrDiffs', 'map', monthly_incr_inds);
+incr_no2_changes(no2visvcd_jja, fullfile('Supplement','MonthlyVisIncrDiffs'), 'map', monthly_incr_inds);
+incr_no2_changes(no2vcd_d_jja, 'DailyIncrDiffs', 'map', daily_incr_inds);
 
-incr_no2_changes(no2vcd_djf, no2visvcd_djf, fullfile('Supplement', 'DJF-MonthlyIncrDiffs'), 'map');
-incr_no2_changes(no2vcd_d_djf, no2visvcd_d_djf, fullfile('Supplement', 'DJF-DailyIncrDiffs'), 'map', 4:9);
-incr_no2_changes(no2vcd_jja, no2visvcd_jja, fullfile('Supplement', 'MonthlyIncrDiffsHists'), 'hist', [], {'remove_outliers', true});
-incr_no2_changes(no2vcd_djf, no2visvcd_djf, fullfile('Supplement', 'DJF-MonthlyIncrDiffsHists'), 'hist', [], {'remove_outliers', true});
-incr_no2_changes(no2vcd_d_jja, no2visvcd_d_jja, fullfile('Supplement', 'DailyIncrDiffsHists'), 'hist', 4:9, {'remove_outliers', true});
-incr_no2_changes(no2vcd_d_djf, no2visvcd_d_djf, fullfile('Supplement', 'DJF-DailyIncrDiffsHists'), 'hist', 4:9, {'remove_outliers', true});
+incr_no2_changes(no2vcd_djf, fullfile('Supplement', 'DJF-MonthlyIncrDiffs'), 'map', monthly_incr_inds);
+incr_no2_changes(no2vcd_d_djf, fullfile('Supplement', 'DJF-DailyIncrDiffs'), 'map', daily_incr_inds);
+incr_no2_changes(no2vcd_jja, fullfile('Supplement', 'MonthlyIncrDiffsHists'), 'hist', monthly_incr_inds, {'remove_outliers', true});
+incr_no2_changes(no2vcd_djf, fullfile('Supplement', 'DJF-MonthlyIncrDiffsHists'), 'hist', monthly_incr_inds, {'remove_outliers', true});
+incr_no2_changes(no2vcd_d_jja, fullfile('Supplement', 'DailyIncrDiffsHists'), 'hist', daily_incr_inds, {'remove_outliers', true});
+incr_no2_changes(no2vcd_d_djf, fullfile('Supplement', 'DJF-DailyIncrDiffsHists'), 'hist', daily_incr_inds, {'remove_outliers', true});
 
 overall_trop_changes('OverallDiffs', 'map');
 overall_vis_changes(fullfile('Supplement', 'OverallVisDiffs'), 'map');
 alb_changes();
 alb_supplement_changes(make_long_plots);
-monthly_v_daily_final();
+monthly_v_daily_v3a();
 land_cover();
 
+insert_change_stats_table('average', main_tex_file, 'INCR-TABLE');
 
 % The following figures take a long time so ask if we should spend the time
 % doing them
@@ -66,8 +70,29 @@ end
 if make_very_long_plots
     insert_change_stats_table('individual', main_tex_file, 'INCR-INDIV-TABLE');
 end
+    
+    function vis_formula_change()
+        figs = gobjects(0);
+        figs(1) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_brdfD_dir, 'new_dir', misc_behr_update_plots.behr_nasa_brdf_vis_dir,...
+            'base_comparison_file', no2visvcd_jja, 'new_comparison_file', no2visvcd_jja, 'diff_type', 'rel', 'plot_type', 'map', 'only_ocean', false);
+        title('');
+        figs(2) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_brdfD_dir, 'new_dir', misc_behr_update_plots.behr_nasa_brdf_vis_dir,...
+            'base_comparison_file', no2visvcd_djf, 'new_comparison_file', no2visvcd_djf, 'diff_type', 'rel', 'plot_type', 'map', 'only_ocean', false);
+        title('');
+        
+        combo_fig = combine_plots(figs, 'dims', [1 0], 'scale', 1);
+        close(figs);
+        colormap(blue_red_cmap);
+        label_subfigs(combo_fig, 'xshift', 0.2);
+        if do_save
+            save_all_formats(combo_fig, fullfile(save_root, 'NewVisFormulation'));
+        end
+        if do_close
+            close(combo_fig);
+        end
+    end
 
-    function incr_no2_changes(no2_variable, vis_no2_variable, save_name, plot_type, increment_indices, extra_args)
+    function incr_no2_changes(no2_variable, save_name, plot_type, increment_indices, extra_args)
         if ~exist('increment_indices', 'var')
             increment_indices = [];
         end
@@ -85,25 +110,20 @@ end
         if do_plot_increment(1, increment_indices)
             figs_vector(1) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_v2_1C_dir, 'new_dir', misc_behr_update_plots.behr_nasa_only_dir,...
                 'base_comparison_file', no2_variable, 'new_comparison_file', no2_variable, 'diff_type', 'rel', 'plot_type', plot_type, 'only_ocean', false, extra_args{:});
-            title('');
+            title('NASA SCDs');
         end
         
         if do_plot_increment(2, increment_indices)
             figs_vector(2) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_only_dir, 'new_dir', misc_behr_update_plots.behr_nasa_brdfD_dir,...
                 'base_comparison_file', no2_variable, 'new_comparison_file', no2_variable, 'diff_type', 'rel', 'plot_type', plot_type, 'only_ocean', false, extra_args{:});
-            title('');
+            title('Surf. reflectance');
             if strcmpi(plot_type, 'map')
                 caxis([-20 20]);
             end
         end
         
-        if do_plot_increment(3, increment_indices)
-            figs_vector(3) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_brdfD_dir, 'new_dir', misc_behr_update_plots.behr_nasa_brdf_vis_dir,...
-                'base_comparison_file', vis_no2_variable, 'new_comparison_file', vis_no2_variable, 'diff_type', 'rel', 'plot_type', plot_type, 'only_ocean', false, extra_args{:});
-            title('');
-        end
         
-        if do_plot_increment(4, increment_indices)
+        if do_plot_increment(3, increment_indices)
             % This is a special case that if we want to plot the difference
             % the new daily profiles made, we need the base variable to be
             % the 'monthly' profiles average because there were no daily
@@ -114,38 +134,40 @@ end
                 base_variable = no2_variable;
             end
             
-            figs_vector(4) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_brdf_vis_dir, 'new_dir', misc_behr_update_plots.behr_nasa_brdf_vis_profs_dir,...
+            figs_vector(3) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_brdf_vis_dir, 'new_dir', misc_behr_update_plots.behr_nasa_brdf_vis_profs_dir,...
                 'base_comparison_file', base_variable, 'new_comparison_file', no2_variable, 'diff_type', 'rel', 'plot_type', plot_type, 'only_ocean', false, extra_args{:});
-            title('');
+            title('NO_2 profiles');
         end
         
-        if do_plot_increment(5, increment_indices)
-            figs_vector(5) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_brdf_vis_profs_tempfix_dir, 'new_dir', misc_behr_update_plots.behr_nasa_brdf_vis_profs_wrftemp_dir,...
+        if do_plot_increment(4, increment_indices)
+            figs_vector(4) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_brdf_vis_profs_tempfix_dir, 'new_dir', misc_behr_update_plots.behr_nasa_brdf_vis_profs_wrftemp_dir,...
                 'base_comparison_file', no2_variable, 'new_comparison_file', no2_variable, 'diff_type', 'rel', 'plot_type', plot_type, 'only_ocean', false, extra_args{:});
-            title('');
+            title('Temperature profiles');
             if strcmpi(plot_type, 'map')
                 caxis([-10 10])
             end
         end
         
-        if do_plot_increment(6, increment_indices)
-            figs_vector(6) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_brdf_vis_profs_wrftemp_dir, 'new_dir', misc_behr_update_plots.behr_final_dir,...
+        if do_plot_increment(5, increment_indices)
+            figs_vector(5) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_brdf_vis_profs_wrftemp_dir, 'new_dir', misc_behr_update_plots.behr_final_dir,...
                 'base_comparison_file', no2_variable, 'new_comparison_file', no2_variable, 'diff_type', 'rel', 'plot_type', plot_type, 'only_ocean', false, extra_args{:});
-            title('');
+            title('Gridding');
         end
         
-        if do_plot_increment(7, increment_indices)
+        if do_plot_increment(6, increment_indices)
             if regcmp(no2_variable, 'Monthly')
                 % This arg will not affect the map plots, it is only used
                 % by histograms
                 only_ocean = true;
+                title_string = 'Ocean refl. wavelength';
             else
                 only_ocean = false;
+                title_string = 'Ocean refl. + profile time';
             end
             
-            figs_vector(7) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_final_dir, 'new_dir', misc_behr_update_plots.behr_v3B_daily_fix_dir,...
+            figs_vector(6) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_final_dir, 'new_dir', misc_behr_update_plots.behr_v3B_daily_fix_dir,...
                 'base_comparison_file', no2_variable, 'new_comparison_file', no2_variable, 'diff_type', 'rel', 'plot_type', plot_type, 'only_ocean', only_ocean, extra_args{:});
-            title('');
+            title(title_string);
             if strcmpi(plot_type, 'map')
                 % For the monthly profiles, only the ocean LUT changed
                 % which is a small effect. For the daily profiles, the time
@@ -159,19 +181,19 @@ end
             end
         end
         
-        if do_plot_increment(8, increment_indices)
-            figs_vector(8) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_v3B_daily_fix_dir, 'new_dir', misc_behr_update_plots.behr_v3B_var_trop_dir,...
+        if do_plot_increment(7, increment_indices)
+            figs_vector(7) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_v3B_daily_fix_dir, 'new_dir', misc_behr_update_plots.behr_v3B_var_trop_dir,...
                 'base_comparison_file', no2_variable, 'new_comparison_file', no2_variable, 'diff_type', 'rel', 'plot_type', plot_type, 'only_ocean', false, extra_args{:});
-            title('');
+            title('Variable tropopause');
             if strcmpi(plot_type, 'map')
                 caxis([-20 20])
             end
         end
         
-        if do_plot_increment(9, increment_indices)
-            figs_vector(9) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_v3B_var_trop_dir, 'new_dir', misc_behr_update_plots.behr_v3B_surfpres_dir,...
+        if do_plot_increment(8, increment_indices)
+            figs_vector(8) = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_v3B_var_trop_dir, 'new_dir', misc_behr_update_plots.behr_v3B_surfpres_dir,...
                 'base_comparison_file', no2_variable, 'new_comparison_file', no2_variable, 'diff_type', 'rel', 'plot_type', plot_type, 'only_ocean', false, extra_args{:});
-            title('');
+            title('Surf. pressure');
             if strcmpi(plot_type, 'map')
                 caxis([-20 20])
             end
@@ -179,7 +201,7 @@ end
         
         figs_vector(~ishandle(figs_vector)) = [];
         if numel(figs_vector) > 6
-            dims = [0 3];
+            dims = [0 2];
             do_center = false;
         else
             dims = [0 2];
@@ -214,16 +236,16 @@ end
         
         fig_jja_monthly = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_v2_1C_dir, 'new_dir', misc_behr_update_plots.behr_v3B_surfpres_dir,...
             'base_comparison_file', no2vcd_jja, 'new_comparison_file', no2vcd_jja, 'diff_type', 'rel', 'plot_type', plot_type);
-        title('');
+        title('JJA, monthly a priori profiles');
         fig_djf_monthly = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_v2_1C_dir, 'new_dir', misc_behr_update_plots.behr_v3B_surfpres_dir,...
             'base_comparison_file', no2vcd_djf, 'new_comparison_file', no2vcd_djf, 'diff_type', 'rel', 'plot_type', plot_type);
-        title('');
+        title('DJF, monthly a priori profiles');
         fig_jja_daily = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_v2_1C_dir, 'new_dir', misc_behr_update_plots.behr_v3B_surfpres_dir,...
             'base_comparison_file', no2vcd_jja, 'new_comparison_file', no2vcd_d_jja, 'diff_type', 'rel', 'plot_type', plot_type);
-        title('');
+        title('JJA, daily a priori profiles');
         fig_djf_daily = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_v2_1C_dir, 'new_dir', misc_behr_update_plots.behr_v3B_surfpres_dir,...
             'base_comparison_file', no2vcd_djf, 'new_comparison_file', no2vcd_d_djf, 'diff_type', 'rel', 'plot_type', plot_type);
-        title('');
+        title('DJF, daily a priori profiles');
         
         figs_vector = [fig_jja_monthly, fig_djf_monthly, fig_jja_daily, fig_djf_daily];
         fig_combo = combine_plots(figs_vector, 'dims', [2 2]);
@@ -247,16 +269,16 @@ end
         
         fig_jja_monthly_vis = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_v2_1C_dir, 'new_dir', misc_behr_update_plots.behr_v3B_surfpres_dir,...
             'base_comparison_file', no2visvcd_jja, 'new_comparison_file', no2visvcd_jja, 'diff_type', 'rel', 'plot_type', plot_type);
-        title('');
+        title('JJA, monthly a priori profiles');
         fig_djf_monthly_vis = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_v2_1C_dir, 'new_dir', misc_behr_update_plots.behr_v3B_surfpres_dir,...
             'base_comparison_file', no2visvcd_djf, 'new_comparison_file', no2visvcd_djf, 'diff_type', 'rel', 'plot_type', plot_type);
-        title('');
+        title('DJF, monthly a priori profiles');
         fig_jja_daily_vis = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_v2_1C_dir, 'new_dir', misc_behr_update_plots.behr_v3B_surfpres_dir,...
             'base_comparison_file', no2visvcd_jja, 'new_comparison_file', no2visvcd_d_jja, 'diff_type', 'rel', 'plot_type', plot_type);
-        title('');
+        title('JJA, daily a priori profiles');
         fig_djf_daily_vis = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_v2_1C_dir, 'new_dir', misc_behr_update_plots.behr_v3B_surfpres_dir,...
             'base_comparison_file', no2visvcd_djf, 'new_comparison_file', no2visvcd_d_djf, 'diff_type', 'rel', 'plot_type', plot_type);
-        title('');
+        title('DJF, daily a priori profiles');
         
         figs_vector = [fig_jja_monthly_vis, fig_djf_monthly_vis, fig_jja_daily_vis, fig_djf_daily_vis];
         fig_combo = combine_plots(figs_vector, 'dims', [2 2]);
@@ -280,16 +302,37 @@ end
         
         fig_jja = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_only_dir, 'new_dir', misc_behr_update_plots.behr_v3B_surfpres_dir,...
             'base_comparison_file', albedo_jja, 'new_comparison_file', albedo_jja, 'diff_type', 'rel', 'plot_type', plot_type);
-        title('');
+        title('Overall (JJA)'); caxis([-100 100]);
         fig_djf = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_only_dir, 'new_dir', misc_behr_update_plots.behr_v3B_surfpres_dir,...
             'base_comparison_file', albedo_djf, 'new_comparison_file', albedo_djf, 'diff_type', 'rel', 'plot_type', plot_type);
-        title('');
+        title('Overall (DJF)'); caxis([-100 100]);
+        fig_v5v6_jja = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_only_dir, 'new_dir', misc_behr_update_plots.behr_modisv6_dir,...
+            'base_comparison_file', albedo_jja, 'new_comparison_file', albedo_jja, 'diff_type', 'rel', 'plot_type', plot_type);
+        title('Black sky, v5 to v6 (JJA)'); caxis([-100 100]);
+        fig_v5v6_djf = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_only_dir, 'new_dir', misc_behr_update_plots.behr_modisv6_dir,...
+            'base_comparison_file', albedo_djf, 'new_comparison_file', albedo_djf, 'diff_type', 'rel', 'plot_type', plot_type);
+        title('Black sky, v5 to v6 (DJF)'); caxis([-100 100]);
+        fig_brdf_bsa_jja = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_modisv6_dir, 'new_dir', misc_behr_update_plots.behr_nasa_brdfD_dir,...
+            'base_comparison_file', albedo_jja, 'new_comparison_file', albedo_jja, 'diff_type', 'rel', 'plot_type', plot_type);
+        title('Black sky to BRF, v6 (JJA)'); caxis([-100 100]);
+        fig_brdf_bsa_djf = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_modisv6_dir, 'new_dir', misc_behr_update_plots.behr_nasa_brdfD_dir,...
+            'base_comparison_file', albedo_djf, 'new_comparison_file', albedo_djf, 'diff_type', 'rel', 'plot_type', plot_type);
+        title('Black sky to BRF, v6 (DJF)'); caxis([-100 100]);
         
-        fig_combo = combine_plots([fig_jja; fig_djf], 'dims', [1 2]);
-        fig_combo.Position(3) = 2*fig_combo.Position(3);
+        fig_ocean_lut = misc_behr_update_plots.ocean_lut_comparison();
+        title('Ocean reflectance LUT');
+        
+        fig_vec = [fig_jja; fig_v5v6_jja; fig_brdf_bsa_jja; fig_djf; fig_v5v6_djf; fig_brdf_bsa_djf; fig_ocean_lut];
+        
+        fig_combo = combine_plots(fig_vec, 'dims', [0 3], 'scale', 1);
         colormap(blue_red_cmap);
-        close([fig_jja, fig_djf]);
+        close(fig_vec);
         label_subfigs(fig_combo, 'xshift', 0.15);
+        
+        ch = get(gcf,'children');
+        % Center the LUT figure. The handles are first-in/last-out, and
+        % legends/colorbars are there too.
+        ch(2).Position(1) = ch(6).Position(1);
         
         if do_save
             save_all_formats(fig_combo, fullfile(save_root, 'SurfReflDiffs'));
@@ -299,23 +342,11 @@ end
         end
     end
 
-    function alb_supplement_changes(regen_from_behr_files, plot_type)
+    function alb_supplement_changes(regen_from_behr_files)
         if ~exist('plot_type', 'var')
             plot_type = 'map';
         end
         
-        fig_v5v6_jja = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_only_dir, 'new_dir', misc_behr_update_plots.behr_modisv6_dir,...
-            'base_comparison_file', albedo_jja, 'new_comparison_file', albedo_jja, 'diff_type', 'rel', 'plot_type', plot_type);
-        title('');
-        fig_v5v6_djf = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_only_dir, 'new_dir', misc_behr_update_plots.behr_modisv6_dir,...
-            'base_comparison_file', albedo_djf, 'new_comparison_file', albedo_djf, 'diff_type', 'rel', 'plot_type', plot_type);
-        title('');
-        fig_brdf_bsa_jja = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_modisv6_dir, 'new_dir', misc_behr_update_plots.behr_nasa_brdfD_dir,...
-            'base_comparison_file', albedo_jja, 'new_comparison_file', albedo_jja, 'diff_type', 'rel', 'plot_type', plot_type);
-        title('');
-        fig_brdf_bsa_djf = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_modisv6_dir, 'new_dir', misc_behr_update_plots.behr_nasa_brdfD_dir,...
-            'base_comparison_file', albedo_djf, 'new_comparison_file', albedo_djf, 'diff_type', 'rel', 'plot_type', plot_type);
-        title('');
         [fig_brdf_bsa_boxplot, fig_tmp(1)] = misc_behr_update_plots.plot_bsa_to_brdf_indiv_pixel_changes(regen_from_behr_files);
         
         fig_vec = [fig_v5v6_jja, fig_v5v6_djf, fig_brdf_bsa_jja, fig_brdf_bsa_djf, fig_brdf_bsa_boxplot];
@@ -354,10 +385,10 @@ end
         
         fig_jja = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_brdf_vis_profs_dir, 'new_dir', misc_behr_update_plots.behr_nasa_brdf_vis_profs_tempfix_dir,...
             'base_comparison_file', no2vcd_jja, 'new_comparison_file', no2vcd_jja, 'diff_type', 'rel', 'plot_type', plot_type);
-        caxis([-10 10]); title('');
+        caxis([-10 10]); title('JJA');
         fig_djf = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_brdf_vis_profs_dir, 'new_dir', misc_behr_update_plots.behr_nasa_brdf_vis_profs_tempfix_dir,...
             'base_comparison_file', no2vcd_djf, 'new_comparison_file', no2vcd_djf, 'diff_type', 'rel', 'plot_type', plot_type);
-        caxis([-10 10]); title('');
+        caxis([-10 10]); title('DJF');
         
         fig_vector = [fig_jja, fig_djf];
         fig_combo = combine_plots(fig_vector, 'dims', [1 2], 'scale', 1);
@@ -374,17 +405,17 @@ end
         end
     end
 
-    function monthly_v_daily_final(plot_type)
+    function monthly_v_daily_v3a(plot_type)
         if ~exist('plot_type', 'var')
             plot_type = 'map';
         end
         
-        fig_jja = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_v3B_surfpres_dir, 'new_dir', misc_behr_update_plots.behr_v3B_surfpres_dir,...
+        fig_jja = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_brdf_vis_profs_dir, 'new_dir', misc_behr_update_plots.behr_nasa_brdf_vis_profs_dir,...
             'base_comparison_file', no2vcd_jja, 'new_comparison_file', no2vcd_d_jja, 'diff_type', 'rel', 'plot_type', plot_type);
-        title('');
-        fig_djf = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_v3B_surfpres_dir, 'new_dir', misc_behr_update_plots.behr_v3B_surfpres_dir,...
+        title('JJA');
+        fig_djf = misc_behr_update_plots.plot_single_incr_diff('base_dir', misc_behr_update_plots.behr_nasa_brdf_vis_profs_dir, 'new_dir', misc_behr_update_plots.behr_nasa_brdf_vis_profs_dir,...
             'base_comparison_file', no2vcd_djf, 'new_comparison_file', no2vcd_d_djf, 'diff_type', 'rel', 'plot_type', plot_type);
-        title('');
+        title('DJF');
         
         all_plots = [fig_jja, fig_djf];
         fig_combo = combine_plots(all_plots, 'dims', [1 2]);
@@ -402,6 +433,10 @@ end
     end
 
     function daily_vs_monthly_ut()
+        if ~ask_yn('This function hasn''t been updated to reflect the manual changes I made to this figure. Do it anyway?')
+            return
+        end
+        
         fprintf('SE US profiles...\n');
         [se_profs, se_prof_med, se_freq_dist, se_mean_bin, se_med_bin, fig_regions] = misc_behr_update_plots.plot_no2_vs_cloudfrac('2012-06-01','2012-08-31',false,'SE');
         drawnow nocallbacks
@@ -527,7 +562,7 @@ end
     end
 
     function vis_cause_plots()
-        [fig_s3, fig_cf, tmpfigs(1), tmpfigs(2), tmpfigs(3)] = misc_behr_update_plots.plot_vis_scatter(false);
+        [fig_s3, fig_cf, tmpfigs(1), tmpfigs(2), tmpfigs(3)] = misc_behr_update_plots.plot_vis_scatter('plot_gui', false, 'apriori_mode','mixing ratio');
         close(tmpfigs);
         
         vis_figs = [fig_s3, fig_cf];
