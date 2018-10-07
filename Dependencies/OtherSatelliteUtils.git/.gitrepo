@@ -6,6 +6,7 @@
 [subrepo]
 	remote = https://github.com/CohenBerkeleyLab/OtherSatelliteUtils.git
 	branch = master
-	commit = 37b8862546032e9a253ad3d75639f89b5347b6a3
-	parent = b88e326d935a114d48174af3a25a5ee684d4f9a2
-	cmdver = 0.3.1
+	commit = ba3b28a1c683b8ecf18f318118ebd0f73ddd15cb
+	parent = 6e7c3fbabaed09ca3abb232ddc6d35ec66806360
+	cmdver = 0.4.0
+	method = merge
