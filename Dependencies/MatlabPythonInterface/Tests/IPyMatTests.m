@@ -282,9 +282,18 @@ classdef IPyMatTests < matlab.unittest.TestCase
         
         function testConvertPyList(testCase)
             % Verify that python2matlab successfully converts a Python
-            % list to a Matlab scalar logical. verifyEqual seems (in
+            % list to a Matlab cell array. verifyEqual seems (in
             % R2014b) to check that the types are the same as well.
             conv_list = python2matlab(py.PySideTests.list_value);
+            test_cell = {int64(1), 1, 'Hello world!', true, testCase.mat_2d_array};
+            testCase.verifyEqual(conv_list, test_cell);
+        end
+        
+        function testConvertPyTuple(testCase)
+            % Verify that python2matlab successfully converts a Python
+            % tuple to a Matlab cell array. verifyEqual seems (in
+            % R2014b) to check that the types are the same as well.
+            conv_list = python2matlab(py.PySideTests.tuple_value);
             test_cell = {int64(1), 1, 'Hello world!', true, testCase.mat_2d_array};
             testCase.verifyEqual(conv_list, test_cell);
         end
@@ -334,7 +343,7 @@ classdef IPyMatTests < matlab.unittest.TestCase
             else
                 mat_size = mat_array;
             end
-            py_size = double(cell2mat(cell(py_array.shape)));
+            py_size = cellfun(@double, cell(py_array.shape));
             if is_native > 0
                 py_size = fliplr(py_size);
             end

@@ -12,9 +12,11 @@ function [ matval ] = python2matlab( val )
 
 if isnumeric(val) || islogical(val)
     matval = val;
+elseif isa(val, 'py.int')
+    matval = int64(val);
 elseif isa(val, 'py.str')
     matval = char(val);
-elseif isa(val,'py.list')
+elseif isa(val,'py.list') || isa(val, 'py.tuple')
     matval = pylist2cell(val);
 elseif isa(val, 'py.numpy.ndarray')
     matval = numpyarray2matarray(val);

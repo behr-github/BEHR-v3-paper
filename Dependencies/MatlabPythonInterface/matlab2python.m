@@ -27,7 +27,7 @@ function [ pyval ] = matlab2python( val, varargin )
 % INPUT PARSING %
 %%%%%%%%%%%%%%%%%
 
-xx = ~cellfun('isempty', regexpi(varargin, 'array1|scalar'));
+xx = ismember(varargin, {'array1','scalar'});
 if sum(xx) == 0
     force_array = 'scalar';
 else
@@ -35,7 +35,7 @@ else
     force_array = varargin{xxf};
 end
 
-xx = ~cellfun('isempty', regexp(varargin, 'never|row|column|always'));
+xx = ismember(varargin, {'never','row','column','always'});
 if sum(xx) == 0
     vec_as_mat = 'never';
 else

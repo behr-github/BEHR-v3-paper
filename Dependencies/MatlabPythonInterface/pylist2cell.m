@@ -4,8 +4,8 @@ function [ cell_out ] = pylist2cell( list )
 %   to a Matlab cell array CELL_OUT by calling PYTHON2MATLAB on each
 %   element of the list.
 
-if ~isa(list, 'py.list')
-    error('pyinterface:bad_input', 'LIST must be of type "py.list"')
+if ~isa(list, 'py.list') && ~isa(list, 'py.tuple')
+    error('pyinterface:bad_input', 'LIST must be of type "py.list" or "py.tuple"')
 end
 
 cell_out = cell(list);

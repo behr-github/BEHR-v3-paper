@@ -12,6 +12,7 @@ numpy_scalar1_array_value = np.array([1.0])
 numpy_scalar1_bool_array_value = np.array([True])
 numpy_array_value = np.array([[1.0, 2.0],[3.0,4.0]])
 list_value = [1, 1.0, 'Hello world!', True, numpy_array_value]
+tuple_value = tuple(list_value)
 dict_value = {'int_value':1, 'float_value':1.0, 'string_value':'Hello world!', 'bool_value':True, 'array_value':numpy_array_value}
 dict_scalar_arrays_value = {'int_value':np.array([1]), 'float_value':np.array([1.0]), 'string_value':'Hello world!', 'bool_value':np.array([True]), 'array_value':numpy_array_value}
 dict_deep_value = {'dict_value': dict_value, 'list_value': list_value, 'int_value': 10, 'float_value': 10.0, 'string_value': 'Goodbye world!', 'array_value': numpy_array_value*10.0}
